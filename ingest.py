@@ -1,9 +1,11 @@
 import os
-from langchain.document_loaders import TextLoader, PyPDFLoader, DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import FAISS
 from dotenv import load_dotenv
+
+# ✅ Updated imports to avoid deprecation
+from langchain_community.document_loaders import TextLoader, PyPDFLoader, DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
 
 # Load environment variables from .env
 load_dotenv()

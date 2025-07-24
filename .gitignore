@@ -27,3 +27,5 @@ faiss_index/
 
 # Pytest cache
 .pytest_cache/
+
+tempCodeRunnerFile.py
