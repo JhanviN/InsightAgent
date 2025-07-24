@@ -1,0 +1,27 @@
+# Core Libraries
+llama-index>=0.10.0
+langchain>=0.1.14
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.2
+
+# Open Source Embeddings + LLM support
+transformers>=4.38.0
+torch>=2.1.0
+
+# API and LLM Clients
+openai>=1.0.0
+together>=0.2.0  # For Together AI (free tier access to Mixtral/Command-R)
+ollama>=0.1.7    # For local LLMs (like mistral, llama3, etc.)
+
+# Backend Web Server
+fastapi>=0.110.0
+uvicorn>=0.24.0
+
+# Optional Frontend (for visualization/testing)
+streamlit>=1.32.0
+
+# Utility Libraries
+pypdf>=3.16.4
+unstructured>=0.11.0  # For parsing PDFs, DOCX, etc.
+python-dotenv>=1.0.0  # For environment config
+tqdm
