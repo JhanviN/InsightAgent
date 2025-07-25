@@ -86,8 +86,9 @@ def analyze_query(query_text: str) -> dict:
     )
 
     # Run chain and return structured response
-    response = chain.invoke({"query": query_text})
+    response = chain.invoke({"question": query_text})  # ✅ FIXED KEY
     return response["result"]
+
 
 # -----------------------------
 # CLI Interface
