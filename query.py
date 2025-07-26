@@ -14,7 +14,7 @@ load_dotenv()
 # Configurations
 # -----------------------------
 INDEX_PATH = "faiss_index"  # Folder containing vector DB
-MODEL_NAME = "llama3-8b-8192"  # Groq-supported model
+MODEL_NAME = "llama-3.1-8b-instant"  # Groq-supported model
 EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 
 # -----------------------------
@@ -47,9 +47,9 @@ Given the following unstructured document context and a user's query, determine:
 2. The payout amount if applicable.
 3. Which clauses or sections support this decision.
 
-Respond strictly in this structured JSON format:
+Respond strictly in this structured JSON format and no word should be present in your response outside json:
 {{
-    "decision": "approved" | "rejected" | "not_sure",
+    "decision": "approved" | "rejected",
     "amount": "<amount or null>",
     "justification": "<brief explanation>",
     "matched_clauses": ["<clause snippet 1>", "<clause snippet 2>", ...]
