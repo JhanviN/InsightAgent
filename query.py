@@ -13,29 +13,27 @@ load_dotenv()
 # -----------------------------
 # Configurations
 # -----------------------------
+<<<<<<< Updated upstream
 INDEX_PATH = "faiss_index"  # Folder containing vector DB
 MODEL_NAME = "llama3-8b-8192"  # Groq-supported model
+=======
+INDEX_PATH = "faiss_index"
+MODEL_NAME = "llama-3.3-70b-versatile"
+>>>>>>> Stashed changes
 EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 
 # -----------------------------
-# Embeddings
+# Load ONCE (important for latency)
 # -----------------------------
-def get_embeddings():
-    return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+embeddings = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+vector_db = FAISS.load_local(INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# -----------------------------
-# LLM (Groq)
-# -----------------------------
-def get_llm():
-    return ChatGroq(
-        api_key=os.getenv("GROQ_API_KEY"),
-        model_name=MODEL_NAME,
-        temperature=0.1
-    )
+llm = ChatGroq(
+    api_key=os.getenv("GROQ_API_KEY"),
+    model_name=MODEL_NAME,
+    temperature=0.1
+)
 
-# -----------------------------
-# Custom Prompt Template
-# -----------------------------
 CLAUSE_DECISION_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
     template="""
@@ -65,36 +63,27 @@ Query:
 """
 )
 
+
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    chain_type="stuff",
+    retriever=vector_db.as_retriever(search_kwargs={"k": 4}),
+    chain_type_kwargs={"prompt": CLAUSE_DECISION_PROMPT},
+    return_source_documents=True
+)
+
 # -----------------------------
-# Core Inference Logic
+# Core Logic
 # -----------------------------
 def analyze_query(query_text: str) -> dict:
-    # Load vector DB
-    embeddings = get_embeddings()
-    vector_db = FAISS.load_local(INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
-
-    # Load Groq LLM
-    llm = get_llm()
-
-    # Build RetrievalQA chain
-    chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=vector_db.as_retriever(search_kwargs={"k": 4}),
-        chain_type_kwargs={"prompt": CLAUSE_DECISION_PROMPT},
-        return_source_documents=True
-    )
-
-    # Run chain and return structured response
-    response = chain.invoke({"query": query_text})  # ✅ FIXED KEY
+    response = qa_chain.invoke({"query": query_text})
     return response["result"]
 
-
 # -----------------------------
-# CLI Interface
+# CLI (for testing)
 # -----------------------------
 if __name__ == "__main__":
-    print("🧾 Decision Agent — Ask document-based questions (e.g., claims, coverage, clauses). Type 'exit' to quit.")
+    print("🧾 Decision Agent — Ask document-based questions. Type 'exit' to quit.")
     while True:
         user_query = input("\n💬 Query: ")
         if user_query.strip().lower() in ["exit", "quit"]:
