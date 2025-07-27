@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import time
 import threading
 from typing import Optional
+import gc
 
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -15,10 +16,10 @@ from langchain_community.vectorstores import FAISS
 load_dotenv()
 
 # Optimized parameters for accuracy vs speed
-CHUNK_SIZE = 800           # Smaller for better accuracy
-CHUNK_OVERLAP = 200        # Higher overlap for context preservation
+CHUNK_SIZE = 1800           # Smaller for better accuracy
+CHUNK_OVERLAP = 1400        # Higher overlap for context preservation
 EMBED_MODEL = "all-MiniLM-L6-v2"
-MAX_CHUNKS = 150          # Limit for memory efficiency
+MAX_CHUNKS = 10000          # Limit for memory efficiency
 
 # Global cache with thread safety
 _embeddings_cache = None
@@ -35,9 +36,55 @@ def get_embeddings():
                 _embeddings_cache = HuggingFaceEmbeddings(
                     model_name=EMBED_MODEL,
                     model_kwargs={'device': 'cpu'},
-                    encode_kwargs={'normalize_embeddings': True, 'batch_size': 16}
+                    encode_kwargs={'normalize_embeddings': True, 'batch_size': 32}
                 )
     return _embeddings_cache
+
+def cleanup_vectorstore(vectorstore):
+    """Clean up vector store from memory"""
+    try:
+        if vectorstore is not None:
+            # Clear FAISS index
+            if hasattr(vectorstore, 'index'):
+                del vectorstore.index
+            
+            # Clear document store
+            if hasattr(vectorstore, 'docstore'):
+                vectorstore.docstore.clear() if hasattr(vectorstore.docstore, 'clear') else None
+                del vectorstore.docstore
+            
+            # Clear index to docstore mapping
+            if hasattr(vectorstore, 'index_to_docstore_id'):
+                vectorstore.index_to_docstore_id.clear()
+                del vectorstore.index_to_docstore_id
+            
+            del vectorstore
+            
+        # Force garbage collection
+        gc.collect()
+        print("🧹 Vector store cleaned from memory")
+        
+    except Exception as e:
+        print(f"⚠️ Cleanup warning: {str(e)}")
+
+def cleanup_chunks(chunks):
+    """Clean up chunks from memory"""
+    try:
+        if chunks:
+            for chunk in chunks:
+                if hasattr(chunk, 'page_content'):
+                    del chunk.page_content
+                if hasattr(chunk, 'metadata'):
+                    chunk.metadata.clear()
+                    del chunk.metadata
+            chunks.clear()
+            del chunks
+        
+        gc.collect()
+        print("🧹 Chunks cleaned from memory")
+        
+    except Exception as e:
+        print(f"⚠️ Chunk cleanup warning: {str(e)}")
 
 def download_document(url: str) -> str:
     """Optimized document download with proper error handling"""
@@ -149,10 +196,12 @@ def create_vectorstore(chunks):
     print(f"✅ Vector store ready in {time.time()-start:.1f}s")
     return vectorstore
 
-def process_document_from_url(document_url: str):
-    """Main processing pipeline"""
+def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
+    """Main processing pipeline with optional cleanup"""
     total_start = time.time()
     temp_file = None
+    chunks = None
+    documents = None
     
     try:
         # Ensure embeddings are loaded
@@ -168,10 +217,38 @@ def process_document_from_url(document_url: str):
         print(f"🎉 TOTAL TIME: {total_time:.1f}s")
         print(f"📊 Rate: {len(chunks)/total_time:.1f} chunks/sec")
         
-        return vectorstore
+        # Optional cleanup of intermediate data
+        if cleanup_after_use:
+            # Clean up documents (no longer needed)
+            if documents:
+                for doc in documents:
+                    if hasattr(doc, 'page_content'):
+                        del doc.page_content
+                    if hasattr(doc, 'metadata'):
+                        doc.metadata.clear()
+                documents.clear()
+                del documents
+                documents = None
+            
+            # Keep chunks reference for manual cleanup later
+            # Don't clean chunks here as they're still referenced in vectorstore
+        
+        # Return format based on parameters
+        if return_chunks:
+            return vectorstore, chunks
+        else:
+            return vectorstore
         
     except Exception as e:
         print(f"❌ Pipeline error: {str(e)}")
+        # Cleanup on error
+        if chunks:
+            cleanup_chunks(chunks)
+        if documents:
+            for doc in documents:
+                if hasattr(doc, 'page_content'):
+                    del doc.page_content
+            documents.clear()
         raise
     finally:
         if temp_file and os.path.exists(temp_file):
@@ -180,6 +257,51 @@ def process_document_from_url(document_url: str):
                 print("🧹 Cleaned up temp file")
             except:
                 pass
+
+def process_and_query_with_cleanup(document_url: str, query_function, *query_args):
+    """
+    Process document, run queries, then clean up everything
+    
+    Args:
+        document_url: URL to process
+        query_function: Function to call for querying (from query.py)
+        *query_args: Arguments to pass to query_function
+    
+    Returns:
+        Query results
+    """
+    vectorstore = None
+    chunks = None
+    
+    try:
+        # Process document
+        vectorstore, chunks = process_document_from_url(document_url, cleanup_after_use=False)
+        
+        # Run queries
+        print("🔍 Running queries...")
+        query_start = time.time()
+        
+        # Call the query function with vectorstore and other args
+        results = query_function(vectorstore, *query_args)
+        
+        query_time = time.time() - query_start
+        print(f"✅ Queries completed in {query_time:.1f}s")
+        
+        return results
+        
+    finally:
+        # Always cleanup, even if queries fail
+        print("🧹 Starting cleanup...")
+        
+        if chunks:
+            cleanup_chunks(chunks)
+        
+        if vectorstore:
+            cleanup_vectorstore(vectorstore)
+        
+        # Final garbage collection
+        gc.collect()
+        print("✅ Complete cleanup finished")
 
 def warmup_embeddings():
     """Initialize embeddings model"""
@@ -203,19 +325,27 @@ def save_to_faiss(chunks, embeddings, index_path):
     vectorstore.save_local(index_path)
 
 if __name__ == "__main__":
-    print("🚀 OPTIMIZED PROCESSING TEST")
+    print("🚀 OPTIMIZED PROCESSING TEST WITH CLEANUP")
     warmup_embeddings()
     
     test_url = "https://hackrx.blob.core.windows.net/assets/policy.pdf?sv=2023-01-03&st=2025-07-04T09%3A11%3A24Z&se=2027-07-05T09%3A11%3A00Z&sr=b&sp=r&sig=N4a9OU0w0QXO6AOIBiu4bpl7AXvEZogeT%2FjUHNO7HzQ%3D"
     
     try:
-        vectorstore = process_document_from_url(test_url)
+        vectorstore, chunks = process_document_from_url(test_url, cleanup_after_use=False, return_chunks=True)
         
         # Test retrieval
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
         docs = retriever.get_relevant_documents("grace period premium payment")
         print(f"🔍 Found {len(docs)} relevant chunks")
+        
         print("✅ SUCCESS!")
+        
+        # Manual cleanup after testing
+        print("🧹 Cleaning up test data...")
+        if chunks:
+            cleanup_chunks(chunks)
+        if vectorstore:
+            cleanup_vectorstore(vectorstore)
         
     except Exception as e:
         print(f"❌ Error: {e}")

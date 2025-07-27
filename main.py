@@ -52,9 +52,9 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     answers: List[str]
-    processing_time: float
-    total_questions: int
-    status: str = "success"
+    # processing_time: float
+    # total_questions: int
+    # status: str = "success"
 
 # Auth helper
 def verify_auth(authorization: str) -> str:
@@ -162,9 +162,9 @@ async def process_document_queries(
         
         return QueryResponse(
             answers=answers,
-            processing_time=round(total_time, 2),
-            total_questions=len(request.questions),
-            status="success"
+            # processing_time=round(total_time, 2),
+            # total_questions=len(request.questions),
+            # status="success"
         )
         
     except Exception as e:
@@ -174,9 +174,9 @@ async def process_document_queries(
         # Return partial response for debugging
         return QueryResponse(
             answers=[f"Processing error: {str(e)}"] * len(request.questions),
-            processing_time=round(error_time, 2),
-            total_questions=len(request.questions),
-            status="error"
+            # processing_time=round(error_time, 2),
+            # total_questions=len(request.questions),
+            # status="error"
         )
 
 @router.post("/hackrx/run-simple")

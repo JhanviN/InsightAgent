@@ -2,6 +2,7 @@ import os
 import json
 import time
 from dotenv import load_dotenv
+import gc
 
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -29,14 +30,37 @@ def get_llm():
             api_key=os.getenv("GROQ_API_KEY"),
             model_name=MODEL_NAME,
             temperature=0.0,  # Deterministic for accuracy
-            max_tokens=300,   # Concise answers
-            request_timeout=25
+            max_tokens=512,   # Concise answers
+            request_timeout=10
         )
     return _llm_cache
 
 def get_embeddings():
     """Get embeddings model"""
     return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+
+def cleanup_chain_components(chain=None, retriever=None):
+    """Clean up chain and retriever components"""
+    try:
+        if chain:
+            # Clear chain components
+            if hasattr(chain, 'combine_documents_chain'):
+                del chain.combine_documents_chain
+            if hasattr(chain, 'retriever'):
+                del chain.retriever
+            del chain
+        
+        if retriever:
+            # Clear retriever
+            if hasattr(retriever, 'vectorstore'):
+                del retriever.vectorstore
+            del retriever
+        
+        gc.collect()
+        print("🧹 Chain components cleaned")
+        
+    except Exception as e:
+        print(f"⚠️ Chain cleanup warning: {str(e)}")
 
 # Optimized prompt for insurance/legal documents
 INSURANCE_PROMPT = PromptTemplate(
@@ -53,14 +77,18 @@ Instructions:
 - Include relevant policy terms, conditions, and time periods
 - If the context doesn't contain the answer, state "Information not found in the provided context"
 - Be concise but complete
+- You have to reply in paragraphs/sentences, feel free to use punctuation marks but avoid using escape characters and special characters
 
 Answer:"""
 )
 
-def analyze_query_with_vectorstore_fast(query_text: str, vectorstore) -> str:
+def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_after=True) -> str:
     """
-    Optimized query analysis with enhanced retrieval
+    Optimized query analysis with enhanced retrieval and cleanup
     """
+    chain = None
+    retriever = None
+    
     try:
         llm = get_llm()
         
@@ -68,9 +96,9 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore) -> str:
         retriever = vectorstore.as_retriever(
             search_type="similarity_score_threshold",
             search_kwargs={
-                "k": 4,
-                "score_threshold": 0.3,  # Filter low-relevance results
-                "fetch_k": 8  # Get more candidates, then filter
+                "k": 4,  # Increase to retrieve more chunks
+                "score_threshold": 0.2,  # Lower threshold for broader recall
+                "fetch_k": 12  # Increase candidates for better filtering
             }
         )
         
@@ -107,11 +135,19 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore) -> str:
     except Exception as e:
         print(f"❌ Query error: {str(e)}")
         return f"Error processing query: {str(e)}"
+    
+    finally:
+        # Cleanup chain components after query
+        if cleanup_after:
+            cleanup_chain_components(chain, retriever)
 
-def analyze_multiple_queries_fast(questions: list, vectorstore) -> list:
+def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=True) -> list:
     """
-    Batch process multiple questions efficiently
+    Batch process multiple questions efficiently with cleanup
     """
+    chain = None
+    retriever = None
+    
     try:
         llm = get_llm()
         
@@ -119,7 +155,7 @@ def analyze_multiple_queries_fast(questions: list, vectorstore) -> list:
         try:
             retriever = vectorstore.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={"k": 4, "score_threshold": 0.3, "fetch_k": 8}
+                search_kwargs={"k": 4, "score_threshold": 0.2, "fetch_k": 12}
             )
         except:
             retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
@@ -138,9 +174,14 @@ def analyze_multiple_queries_fast(questions: list, vectorstore) -> list:
         
         for i, question in enumerate(questions, 1):
             start = time.time()
-            print(f"🔍 [{i}/{len(questions)}] Processing: {question[:60]}...")
+            print(f"🔍 [{i}/{len(questions)}] Processing: {question}...")
             
             try:
+                # Retrieve documents to get context
+                docs = retriever.get_relevant_documents(question)
+                context = "\n".join([doc.page_content for doc in docs])
+                print(f"\nContext for question ', {context}...\n")
+                
                 response = chain.invoke({"query": question})
                 answer = response["result"].strip()
                 
@@ -165,19 +206,27 @@ def analyze_multiple_queries_fast(questions: list, vectorstore) -> list:
     except Exception as e:
         print(f"❌ Batch error: {str(e)}")
         return [f"Batch processing error: {str(e)}"] * len(questions)
+    
+    finally:
+        # Cleanup after batch processing
+        if cleanup_after:
+            cleanup_chain_components(chain, retriever)
 
-def analyze_query_with_sources_fast(query_text: str, vectorstore) -> dict:
-    """Query with source information for debugging"""
+def analyze_query_with_sources_fast(query_text: str, vectorstore, cleanup_after=True) -> dict:
+    """Query with source information for debugging, with cleanup"""
+    chain = None
+    retriever = None
+    
     try:
         llm = get_llm()
         
         try:
             retriever = vectorstore.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={"k": 3, "score_threshold": 0.3}
+                search_kwargs={"k": 4, "score_threshold": 0.2}
             )
         except:
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
         
         chain = RetrievalQA.from_chain_type(
             llm=llm,
@@ -214,10 +263,30 @@ def analyze_query_with_sources_fast(query_text: str, vectorstore) -> dict:
             "sources": [],
             "query": query_text
         }
+    
+    finally:
+        # Cleanup after source query
+        if cleanup_after:
+            cleanup_chain_components(chain, retriever)
 
-# Legacy support
+def query_with_auto_cleanup(vectorstore, query_text: str) -> str:
+    """
+    Wrapper function that automatically cleans up after single query
+    """
+    return analyze_query_with_vectorstore_fast(query_text, vectorstore, cleanup_after=True)
+
+def batch_query_with_auto_cleanup(vectorstore, questions: list) -> list:
+    """
+    Wrapper function that automatically cleans up after batch queries
+    """
+    return analyze_multiple_queries_fast(questions, vectorstore, cleanup_after=True)
+
+# Legacy support with cleanup
 def analyze_query(query_text: str) -> str:
-    """Legacy function for local FAISS index"""
+    """Legacy function for local FAISS index with cleanup"""
+    embeddings = None
+    vector_db = None
+    
     try:
         embeddings = get_embeddings()
         vector_db = FAISS.load_local(
@@ -225,9 +294,30 @@ def analyze_query(query_text: str) -> str:
             embeddings, 
             allow_dangerous_deserialization=True
         )
-        return analyze_query_with_vectorstore_fast(query_text, vector_db)
+        return analyze_query_with_vectorstore_fast(query_text, vector_db, cleanup_after=True)
+        
     except Exception as e:
         return f"Error: {str(e)}"
+    
+    finally:
+        # Clean up loaded components
+        if vector_db:
+            try:
+                if hasattr(vector_db, 'index'):
+                    del vector_db.index
+                if hasattr(vector_db, 'docstore'):
+                    vector_db.docstore.clear() if hasattr(vector_db.docstore, 'clear') else None
+                del vector_db
+            except:
+                pass
+        
+        if embeddings:
+            try:
+                del embeddings
+            except:
+                pass
+        
+        gc.collect()
 
 def validate_answer_quality(answer: str, question: str) -> bool:
     """Basic answer quality validation"""
@@ -244,11 +334,12 @@ def validate_answer_quality(answer: str, question: str) -> bool:
     return not any(indicator in answer.lower() for indicator in error_indicators)
 
 def test_query_performance(vectorstore, test_questions: list):
-    """Performance testing utility"""
+    """Performance testing utility with cleanup"""
     print(f"🧪 Testing with {len(test_questions)} questions...")
     start = time.time()
     
-    answers = analyze_multiple_queries_fast(test_questions, vectorstore)
+    # Use batch processing with cleanup
+    answers = analyze_multiple_queries_fast(test_questions, vectorstore, cleanup_after=True)
     
     total_time = time.time() - start
     avg_time = total_time / len(test_questions)
@@ -265,8 +356,31 @@ def test_query_performance(vectorstore, test_questions: list):
     
     return answers
 
+# Example usage functions that demonstrate the cleanup pattern
+def process_single_query_example(vectorstore, question: str):
+    """Example: Process single query with automatic cleanup"""
+    print(f"🔍 Processing: {question}")
+    
+    answer = query_with_auto_cleanup(vectorstore, question)
+    
+    print(f"✅ Answer: {answer}")
+    print("🧹 Memory cleaned automatically")
+    
+    return answer
+
+def process_batch_queries_example(vectorstore, questions: list):
+    """Example: Process multiple queries with automatic cleanup"""
+    print(f"🔍 Processing {len(questions)} questions...")
+    
+    answers = batch_query_with_auto_cleanup(vectorstore, questions)
+    
+    print(f"✅ Processed {len(answers)} answers")
+    print("🧹 Memory cleaned automatically")
+    
+    return answers
+
 if __name__ == "__main__":
-    print("🚀 Query Engine Test")
+    print("🚀 Query Engine Test with Cleanup")
     
     test_questions = [
         "What is the grace period for premium payment?",
@@ -275,6 +389,9 @@ if __name__ == "__main__":
         "What is the waiting period for cataract surgery?",
         "What is the No Claim Discount offered?"
     ]
+    
+    embeddings = None
+    vector_db = None
     
     try:
         embeddings = get_embeddings()
@@ -294,3 +411,26 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Test failed: {str(e)}")
         print("Run ingest.py first to create the index")
+    
+    finally:
+        # Final cleanup
+        print("🧹 Final cleanup...")
+        
+        if vector_db:
+            try:
+                if hasattr(vector_db, 'index'):
+                    del vector_db.index
+                if hasattr(vector_db, 'docstore'):
+                    vector_db.docstore.clear() if hasattr(vector_db.docstore, 'clear') else None
+                del vector_db
+            except:
+                pass
+        
+        if embeddings:
+            try:
+                del embeddings
+            except:
+                pass
+        
+        gc.collect()
+        print("✅ All cleanup completed")
