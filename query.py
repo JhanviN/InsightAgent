@@ -13,7 +13,7 @@ from langchain.schema import Document
 load_dotenv()
 
 # Configuration
-MODEL_NAME = "llama-3.1-8b-instant"
+MODEL_NAME = "llama-3.3-70b-versatile"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 INDEX_PATH = "faiss_index"
 
@@ -30,7 +30,7 @@ def get_llm():
             model_name=MODEL_NAME,
             temperature=0.0,  # Deterministic for accuracy
             max_tokens=300,   # Concise answers
-            request_timeout=25
+            request_timeout=10
         )
     return _llm_cache
 
@@ -41,20 +41,22 @@ def get_embeddings():
 # Optimized prompt for insurance/legal documents
 INSURANCE_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
-    template="""You are an expert insurance policy analyst. Based on the policy document context below, provide a precise and accurate answer.
+    template="""
+You are an expert insurance policy analyst. Use the provided context from the document to answer the question.
 
-Context from policy document:
+Context:
 {context}
 
 Question: {question}
 
 Instructions:
-- Answer directly and specifically based only on the provided context
-- Include relevant policy terms, conditions, and time periods
-- If the context doesn't contain the answer, state "Information not found in the provided context"
-- Be concise but complete
+- Respond clearly and concisely in 2-3 sentences maximum.
+- If the answer is not found in the context, reply with: "Information not found in the document."
+- Avoid unnecessary elaboration, filler, or repeated context.
+- Use normal punctuation; do not include escape characters or special formatting.
 
-Answer:"""
+Answer:
+"""
 )
 
 def analyze_query_with_vectorstore_fast(query_text: str, vectorstore) -> str:
@@ -69,7 +71,7 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore) -> str:
             search_type="similarity_score_threshold",
             search_kwargs={
                 "k": 4,
-                "score_threshold": 0.3,  # Filter low-relevance results
+                "score_threshold": 0.2,  # Filter low-relevance results
                 "fetch_k": 8  # Get more candidates, then filter
             }
         )
@@ -119,7 +121,7 @@ def analyze_multiple_queries_fast(questions: list, vectorstore) -> list:
         try:
             retriever = vectorstore.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={"k": 4, "score_threshold": 0.3, "fetch_k": 8}
+                search_kwargs={"k": 4, "score_threshold": 0.2, "fetch_k": 8}
             )
         except:
             retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
@@ -174,7 +176,7 @@ def analyze_query_with_sources_fast(query_text: str, vectorstore) -> dict:
         try:
             retriever = vectorstore.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={"k": 3, "score_threshold": 0.3}
+                search_kwargs={"k": 3, "score_threshold": 0.2}
             )
         except:
             retriever = vectorstore.as_retriever(search_kwargs={"k": 3})

@@ -15,10 +15,10 @@ from langchain_community.vectorstores import FAISS
 load_dotenv()
 
 # Optimized parameters for accuracy vs speed
-CHUNK_SIZE = 800           # Smaller for better accuracy
-CHUNK_OVERLAP = 200        # Higher overlap for context preservation
+CHUNK_SIZE = 1100           # Smaller for better accuracy
+CHUNK_OVERLAP = 300        # Higher overlap for context preservation
 EMBED_MODEL = "all-MiniLM-L6-v2"
-MAX_CHUNKS = 150          # Limit for memory efficiency
+MAX_CHUNKS = 400          # Limit for memory efficiency
 
 # Global cache with thread safety
 _embeddings_cache = None
