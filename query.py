@@ -62,24 +62,44 @@ def cleanup_chain_components(chain=None, retriever=None):
     except Exception as e:
         print(f"⚠️ Chain cleanup warning: {str(e)}")
 
-# Optimized prompt for insurance/legal documents
+# # Optimized prompt for insurance/legal documents
+# INSURANCE_PROMPT = PromptTemplate(
+#     input_variables=["context", "question"],
+#     template="""You are an expert insurance policy analyst. Based on the policy document context below, provide a precise and accurate answer.
+
+# Context from policy document:
+# {context}
+
+# Question: {question}
+
+# Instructions:
+# - Answer directly and specifically based only on the provided context
+# - Include relevant policy terms, conditions, and time periods
+# - If the context doesn't contain the answer, state "Information not found in the provided context"
+# - Be concise but complete
+# - You have to reply in paragraphs/sentences, feel free to use punctuation marks but avoid using escape characters and special characters
+
+# Answer:"""
+# )
+
 INSURANCE_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
-    template="""You are an expert insurance policy analyst. Based on the policy document context below, provide a precise and accurate answer.
+    template="""
+You are an expert insurance policy analyst. Use the provided context from the document to answer the question.
 
-Context from policy document:
+Context:
 {context}
 
 Question: {question}
 
 Instructions:
-- Answer directly and specifically based only on the provided context
-- Include relevant policy terms, conditions, and time periods
-- If the context doesn't contain the answer, state "Information not found in the provided context"
-- Be concise but complete
-- You have to reply in paragraphs/sentences, feel free to use punctuation marks but avoid using escape characters and special characters
+- Respond clearly and concisely in 2-3 sentences maximum.
+- If the answer is not found in the context, reply with: "Information not found in the document."
+- Avoid unnecessary elaboration, filler, or repeated context.
+- Use normal punctuation; do not include escape characters or special formatting.
 
-Answer:"""
+Answer:
+"""
 )
 
 def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_after=True) -> str:
@@ -357,80 +377,24 @@ def test_query_performance(vectorstore, test_questions: list):
     return answers
 
 # Example usage functions that demonstrate the cleanup pattern
-def process_single_query_example(vectorstore, question: str):
-    """Example: Process single query with automatic cleanup"""
-    print(f"🔍 Processing: {question}")
+# def process_single_query_example(vectorstore, question: str):
+#     """Example: Process single query with automatic cleanup"""
+#     print(f"🔍 Processing: {question}")
     
-    answer = query_with_auto_cleanup(vectorstore, question)
+#     answer = query_with_auto_cleanup(vectorstore, question)
     
-    print(f"✅ Answer: {answer}")
-    print("🧹 Memory cleaned automatically")
+#     print(f"✅ Answer: {answer}")
+#     print("🧹 Memory cleaned automatically")
     
-    return answer
+#     return answer
 
-def process_batch_queries_example(vectorstore, questions: list):
-    """Example: Process multiple queries with automatic cleanup"""
-    print(f"🔍 Processing {len(questions)} questions...")
+# def process_batch_queries_example(vectorstore, questions: list):
+#     """Example: Process multiple queries with automatic cleanup"""
+#     print(f"🔍 Processing {len(questions)} questions...")
     
-    answers = batch_query_with_auto_cleanup(vectorstore, questions)
+#     answers = batch_query_with_auto_cleanup(vectorstore, questions)
     
-    print(f"✅ Processed {len(answers)} answers")
-    print("🧹 Memory cleaned automatically")
+#     print(f"✅ Processed {len(answers)} answers")
+#     print("🧹 Memory cleaned automatically")
     
-    return answers
-
-if __name__ == "__main__":
-    print("🚀 Query Engine Test with Cleanup")
-    
-    test_questions = [
-        "What is the grace period for premium payment?",
-        "What is the waiting period for pre-existing diseases?", 
-        "Does this policy cover maternity expenses?",
-        "What is the waiting period for cataract surgery?",
-        "What is the No Claim Discount offered?"
-    ]
-    
-    embeddings = None
-    vector_db = None
-    
-    try:
-        embeddings = get_embeddings()
-        vector_db = FAISS.load_local(
-            INDEX_PATH, 
-            embeddings, 
-            allow_dangerous_deserialization=True
-        )
-        
-        answers = test_query_performance(vector_db, test_questions)
-        
-        print("\n📋 Sample Results:")
-        for i, (q, a) in enumerate(zip(test_questions[:3], answers[:3])):
-            print(f"\nQ{i+1}: {q}")
-            print(f"A{i+1}: {a[:120]}...")
-            
-    except Exception as e:
-        print(f"❌ Test failed: {str(e)}")
-        print("Run ingest.py first to create the index")
-    
-    finally:
-        # Final cleanup
-        print("🧹 Final cleanup...")
-        
-        if vector_db:
-            try:
-                if hasattr(vector_db, 'index'):
-                    del vector_db.index
-                if hasattr(vector_db, 'docstore'):
-                    vector_db.docstore.clear() if hasattr(vector_db.docstore, 'clear') else None
-                del vector_db
-            except:
-                pass
-        
-        if embeddings:
-            try:
-                del embeddings
-            except:
-                pass
-        
-        gc.collect()
-        print("✅ All cleanup completed")
+#     return answers

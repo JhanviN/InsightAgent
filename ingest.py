@@ -319,33 +319,3 @@ def load_documents_from_directory(data_path):
     from langchain_community.document_loaders import DirectoryLoader, TextLoader
     loader = DirectoryLoader(data_path, glob="**/*.pdf", loader_cls=PyPDFLoader)
     return loader.load()
-
-def save_to_faiss(chunks, embeddings, index_path):
-    vectorstore = FAISS.from_documents(chunks, embeddings)
-    vectorstore.save_local(index_path)
-
-if __name__ == "__main__":
-    print("🚀 OPTIMIZED PROCESSING TEST WITH CLEANUP")
-    warmup_embeddings()
-    
-    test_url = "https://hackrx.blob.core.windows.net/assets/policy.pdf?sv=2023-01-03&st=2025-07-04T09%3A11%3A24Z&se=2027-07-05T09%3A11%3A00Z&sr=b&sp=r&sig=N4a9OU0w0QXO6AOIBiu4bpl7AXvEZogeT%2FjUHNO7HzQ%3D"
-    
-    try:
-        vectorstore, chunks = process_document_from_url(test_url, cleanup_after_use=False, return_chunks=True)
-        
-        # Test retrieval
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
-        docs = retriever.get_relevant_documents("grace period premium payment")
-        print(f"🔍 Found {len(docs)} relevant chunks")
-        
-        print("✅ SUCCESS!")
-        
-        # Manual cleanup after testing
-        print("🧹 Cleaning up test data...")
-        if chunks:
-            cleanup_chunks(chunks)
-        if vectorstore:
-            cleanup_vectorstore(vectorstore)
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")

@@ -84,11 +84,11 @@ def read_root():
 
 @app.get("/health")
 def health_check():
+    import multiprocessing
+    children = multiprocessing.active_children()
     return {
-        "status": "healthy",
-        "embeddings": "loaded",
-        "workers": executor._threads,
-        "timestamp": time.time()
+        "status": "ok",
+        "workers": [str(child) for child in children], 
     }
 
 @router.post("/hackrx/run", response_model=QueryResponse)
@@ -179,59 +179,6 @@ async def process_document_queries(
             # status="error"
         )
 
-@router.post("/hackrx/run-simple")
-async def process_simple(
-    request: QueryRequest,
-    authorization: str = Header(...)
-):
-    """
-    Simplified endpoint matching exact expected format
-    """
-    verify_auth(authorization)
-    
-    try:
-        loop = asyncio.get_event_loop()
-        
-        # Process document
-        vectorstore = await loop.run_in_executor(
-            executor,
-            process_document_from_url,
-            request.documents
-        )
-        
-        # Process questions
-        raw_answers = await loop.run_in_executor(
-            executor,
-            analyze_multiple_queries_fast,
-            request.questions,
-            vectorstore
-        )
-        
-        # Clean answers
-        answers = []
-        for result in raw_answers:
-            if isinstance(result, str):
-                try:
-                    parsed = json.loads(result)
-                    answer = parsed.get("justification", result)
-                except json.JSONDecodeError:
-                    answer = result
-            else:
-                answer = str(result)
-            
-            # Basic cleanup
-            answer = answer.strip()
-            if answer.startswith("Answer:"):
-                answer = answer[7:].strip()
-            
-            answers.append(answer)
-        
-        return {"answers": answers}
-        
-    except Exception as e:
-        print(f"❌ Simple endpoint error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")
-
 # Performance monitoring endpoint
 @app.get("/api/v1/stats")
 def get_performance_stats():
@@ -256,42 +203,6 @@ def get_performance_stats():
             "overlap": 200
         }
     }
-
-# Test endpoint
-@app.post("/api/v1/test")
-async def test_endpoint():
-    """Quick test endpoint"""
-    try:
-        # Test with sample URL
-        test_url = "https://hackrx.blob.core.windows.net/assets/policy.pdf?sv=2023-01-03&st=2025-07-04T09%3A11%3A24Z&se=2027-07-05T09%3A11%3A00Z&sr=b&sp=r&sig=N4a9OU0w0QXO6AOIBiu4bpl7AXvEZogeT%2FjUHNO7HzQ%3D"
-        test_questions = ["What is the grace period for premium payment?"]
-        
-        loop = asyncio.get_event_loop()
-        vectorstore = await loop.run_in_executor(
-            executor,
-            process_document_from_url,
-            test_url
-        )
-        
-        answers = await loop.run_in_executor(
-            executor,
-            analyze_multiple_queries_fast,
-            test_questions,
-            vectorstore
-        )
-        
-        return {
-            "status": "success",
-            "test_answer": answers[0][:100] + "...",
-            "message": "API is working correctly"
-        }
-        
-    except Exception as e:
-        return {
-            "status": "error", 
-            "error": str(e),
-            "message": "Test failed"
-        }
 
 # Include router
 app.include_router(router, prefix="/api/v1")
