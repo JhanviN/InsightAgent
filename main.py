@@ -103,6 +103,7 @@ async def process_document_queries(
     start_time = time.time()
     
     # Authentication
+    print(authorization)
     verify_auth(authorization)
     
     try:

@@ -1,0 +1,13 @@
+__pycache__/
+venv/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.log
+*.zip
+*.tar
+*.tar.gz
+*.egg-info/
+faiss_index/
+data/
