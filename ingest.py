@@ -18,7 +18,7 @@ load_dotenv()
 # Optimized parameters for accuracy vs speed
 CHUNK_SIZE = 1800           # Smaller for better accuracy
 CHUNK_OVERLAP = 1400        # Higher overlap for context preservation
-EMBED_MODEL = "all-MiniLM-L6-v2"
+EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 MAX_CHUNKS = 10000          # Limit for memory efficiency
 
 # Global cache with thread safety

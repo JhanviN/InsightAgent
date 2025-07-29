@@ -15,7 +15,7 @@ load_dotenv()
 
 # Configuration
 MODEL_NAME = "llama-3.1-8b-instant"
-EMBED_MODEL = "all-MiniLM-L6-v2"
+EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 INDEX_PATH = "faiss_index"
 
 # Global LLM cache
