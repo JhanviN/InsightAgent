@@ -2,8 +2,11 @@ fastapi==0.116.1
 langchain==0.3.27
 langchain_community==0.3.27
 langchain_groq==0.3.6
+langchain_community==0.3.27
+langchain_groq==0.3.6
 pydantic==2.11.7
 python-dotenv==1.1.1
+Requests==2.32.4
 Requests==2.32.4
 uvicorn==0.35.0
 sentence-transformers==2.2.2
