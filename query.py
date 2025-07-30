@@ -10,12 +10,12 @@ from langchain_groq import ChatGroq
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
-
+from concurrent.futures import ThreadPoolExecutor
 load_dotenv()
 
 # Configuration
-MODEL_NAME = "llama-3.1-8b-instant"
-EMBED_MODEL = "BAAI/bge-base-en-v1.5"
+MODEL_NAME = "llama-3.3-70b-versatile"
+EMBED_MODEL = "all-MiniLM-L6-v2"
 INDEX_PATH = "faiss_index"
 
 # Global LLM cache
@@ -30,7 +30,7 @@ def get_llm():
             api_key=os.getenv("GROQ_API_KEY"),
             model_name=MODEL_NAME,
             temperature=0.0,  # Deterministic for accuracy
-            max_tokens=512,   # Concise answers
+            max_tokens=400,   # Concise answers
             request_timeout=10
         )
     return _llm_cache
@@ -116,12 +116,16 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_af
         retriever = vectorstore.as_retriever(
             search_type="similarity_score_threshold",
             search_kwargs={
-                "k": 4,  # Increase to retrieve more chunks
-                "score_threshold": 0.2,  # Lower threshold for broader recall
-                "fetch_k": 12  # Increase candidates for better filtering
+                "k": 4,
+                "score_threshold": 0.2,  # Filter low-relevance results
+                "fetch_k": 8  # Get more candidates, then filter
             }
         )
         
+        # retriever = vectorstore.as_retriever(
+        #     search_type="mmr", 
+        #     search_kwargs={"k": 5, "lambda_mult": 0.4}
+        # )
         # Try retrieval, fallback to basic if score threshold fails
         try:
             docs = retriever.get_relevant_documents(query_text)
@@ -175,7 +179,7 @@ def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=Tr
         try:
             retriever = vectorstore.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={"k": 4, "score_threshold": 0.2, "fetch_k": 12}
+                search_kwargs={"k": 4, "score_threshold": 0.2, "fetch_k": 8}
             )
         except:
             retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
@@ -232,6 +236,8 @@ def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=Tr
         if cleanup_after:
             cleanup_chain_components(chain, retriever)
 
+
+
 def analyze_query_with_sources_fast(query_text: str, vectorstore, cleanup_after=True) -> dict:
     """Query with source information for debugging, with cleanup"""
     chain = None
@@ -243,7 +249,7 @@ def analyze_query_with_sources_fast(query_text: str, vectorstore, cleanup_after=
         try:
             retriever = vectorstore.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={"k": 4, "score_threshold": 0.2}
+                search_kwargs={"k": 3, "score_threshold": 0.2}
             )
         except:
             retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
