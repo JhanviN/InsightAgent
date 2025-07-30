@@ -297,13 +297,13 @@ async def test_endpoint():
 # Include router
 app.include_router(router, prefix="/api/v1")
 
-if __name__ == "__main__":
-    import uvicorn
-    print("🚀 Starting InsightAgent API server...")
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False,  # Disable for production
-        workers=1      # Single worker for consistency
-    )
+# if __name__ == "__main__":
+#     import uvicorn
+#     print("🚀 Starting InsightAgent API server...")
+#     uvicorn.run(
+#         "main:app",
+#         host="0.0.0.0",
+#         port=8000,
+#         reload=False,  # Disable for production
+#         workers=1      # Single worker for consistency
+#     )
