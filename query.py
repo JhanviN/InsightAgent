@@ -3,7 +3,7 @@ import json
 import time
 from dotenv import load_dotenv
 import gc
-
+import asyncio
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
@@ -81,7 +81,7 @@ def cleanup_chain_components(chain=None, retriever=None):
 
 # Answer:"""
 # )
-
+#Prompt Tempelate 2.0
 INSURANCE_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
     template="""
@@ -102,6 +102,14 @@ Answer:
 """
 )
 
+# ##Prompt Tempelate 3.0
+# INSURANCE_PROMPT = PromptTemplate(
+#     input_variables=["context", "question"],
+#     template="""Context: {context}
+# Question: {question}
+# Answer in 1-2 sentences based on the context. If not found, say: "Information not found."
+# Answer:"""
+# )
 def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_after=True) -> str:
     """
     Optimized query analysis with enhanced retrieval and cleanup
@@ -113,19 +121,20 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_af
         llm = get_llm()
         
         # Enhanced retrieval with better scoring
-        retriever = vectorstore.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={
-                "k": 4,
-                "score_threshold": 0.2,  # Filter low-relevance results
-                "fetch_k": 8  # Get more candidates, then filter
-            }
-        )
-        
+        ##changing the retriever settings 
         # retriever = vectorstore.as_retriever(
-        #     search_type="mmr", 
-        #     search_kwargs={"k": 5, "lambda_mult": 0.4}
+        #     search_type="similarity_score_threshold",
+        #     search_kwargs={
+        #         "k": 4,
+        #         "score_threshold": 0.2,  # Filter low-relevance results
+        #         "fetch_k": 8  # Get more candidates, then filter
+        #     }
         # )
+        
+        retriever = vectorstore.as_retriever(
+            search_type="mmr", 
+            search_kwargs={"k": 3, "lambda_mult": 0.4}
+        )
         # Try retrieval, fallback to basic if score threshold fails
         try:
             docs = retriever.get_relevant_documents(query_text)
@@ -165,7 +174,7 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_af
         if cleanup_after:
             cleanup_chain_components(chain, retriever)
 
-def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=True) -> list:
+# def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=True) -> list:
     """
     Batch process multiple questions efficiently with cleanup
     """
@@ -235,8 +244,28 @@ def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=Tr
         # Cleanup after batch processing
         if cleanup_after:
             cleanup_chain_components(chain, retriever)
-
-
+async def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=True) -> list:
+    llm = get_llm()
+    retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 3, "lambda_mult": 0.5})
+    chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=retriever,
+        chain_type_kwargs={"prompt": INSURANCE_PROMPT},
+        return_source_documents=False
+    )
+    async def process_question(question):
+        start = time.time()
+        response = await asyncio.get_event_loop().run_in_executor(None, lambda: chain.invoke({"query": question})["result"].strip())
+        answer = response[7:].strip() if response.startswith("Answer:") else response
+        print(f"✅ [Q{question[:20]}...] Done in {time.time() - start:.1f}s")
+        return answer
+    tasks = [process_question(q) for q in questions]
+    answers = await asyncio.gather(*tasks, return_exceptions=True)
+    answers = [str(ans) if isinstance(ans, Exception) else ans for ans in answers]
+    if cleanup_after:
+        cleanup_chain_components(chain, retriever)
+    return answers
 
 def analyze_query_with_sources_fast(query_text: str, vectorstore, cleanup_after=True) -> dict:
     """Query with source information for debugging, with cleanup"""

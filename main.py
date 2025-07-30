@@ -103,7 +103,6 @@ async def process_document_queries(
     start_time = time.time()
     
     # Authentication
-    print(authorization)
     verify_auth(authorization)
     
     try:
@@ -125,14 +124,14 @@ async def process_document_queries(
         # Step 2: Process questions in batch (more efficient)
         print("🔍 Processing questions...")
         query_start = time.time()
-        
-        raw_answers = await loop.run_in_executor(
-            executor,
-            analyze_multiple_queries_fast,
-            request.questions,
-            vectorstore
-        )
-        
+        #changed code acc to async query.py function
+        # raw_answers = await loop.run_in_executor(
+        #     executor,
+        #     analyze_multiple_queries_fast,
+        #     request.questions,
+        #     vectorstore
+        # )
+        raw_answers = await analyze_multiple_queries_fast(request.questions, vectorstore)
         query_time = time.time() - query_start
         print(f"✅ Questions processed in {query_time:.1f}s")
         
@@ -208,13 +207,13 @@ def get_performance_stats():
 # Include router
 app.include_router(router, prefix="/api/v1")
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     print("🚀 Starting InsightAgent API server...")
-#     uvicorn.run(
-#         "main:app",
-#         host="0.0.0.0",
-#         port=8000,
-#         reload=False,  # Disable for production
-#         workers=1      # Single worker for consistency
-#     )
+if __name__ == "__main__":
+    import uvicorn
+    print("🚀 Starting InsightAgent API server...")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,  # Disable for production
+        workers=1      # Single worker for consistency
+    )

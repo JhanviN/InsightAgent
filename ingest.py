@@ -7,7 +7,8 @@ import time
 import threading
 from typing import Optional
 import gc
-
+import hashlib
+from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -196,6 +197,103 @@ def create_vectorstore(chunks):
     print(f"✅ Vector store ready in {time.time()-start:.1f}s")
     return vectorstore
 
+# def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
+    """Main processing pipeline with optional cleanup"""
+    total_start = time.time()
+    temp_file = None
+    chunks = None
+    documents = None
+    
+    try:
+        # Ensure embeddings are loaded
+        get_embeddings()
+        
+        # Pipeline steps
+        temp_file = download_document(document_url)
+        documents = load_document(temp_file)
+        chunks = smart_chunk_documents(documents)
+        vectorstore = create_vectorstore(chunks)
+        
+        total_time = time.time() - total_start
+        print(f"🎉 TOTAL TIME: {total_time:.1f}s")
+        print(f"📊 Rate: {len(chunks)/total_time:.1f} chunks/sec")
+        
+        # Optional cleanup of intermediate data
+        if cleanup_after_use:
+            # Clean up documents (no longer needed)
+            if documents:
+                for doc in documents:
+                    if hasattr(doc, 'page_content'):
+                        del doc.page_content
+                    if hasattr(doc, 'metadata'):
+                        doc.metadata.clear()
+                documents.clear()
+                del documents
+                documents = None
+            
+            # Keep chunks reference for manual cleanup later
+            # Don't clean chunks here as they're still referenced in vectorstore
+        
+        # Return format based on parameters
+        if return_chunks:
+            return vectorstore, chunks
+        else:
+            return vectorstore
+        
+    except Exception as e:
+        print(f"❌ Pipeline error: {str(e)}")
+        # Cleanup on error
+        if chunks:
+            cleanup_chunks(chunks)
+        if documents:
+            for doc in documents:
+                if hasattr(doc, 'page_content'):
+                    del doc.page_content
+            documents.clear()
+        raise
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.unlink(temp_file)
+                print("🧹 Cleaned up temp file")
+            except:
+                pass
+#function changed storing faiss index once the url doc is processed 
+# def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
+#     total_start = time.time()
+#     temp_file = None
+#     chunks = None
+#     documents = None
+#     url_hash = hashlib.md5(document_url.encode()).hexdigest()
+#     cache_path = f"/app/faiss_index/{url_hash}"
+#     os.makedirs("/app/faiss_cache", exist_ok=True)
+#     embeddings = get_embeddings()
+    
+#     if os.path.exists(cache_path):
+#         vectorstore = FAISS.load_local(cache_path, embeddings, allow_dangerous_deserialization=True)
+#         print(f"✅ Loaded cached vectorstore in {time.time() - total_start:.1f}s")
+#         return vectorstore
+    
+#     try:
+#         temp_file = download_document(document_url)
+#         documents = load_document(temp_file)
+#         chunks = smart_chunk_documents(documents)
+#         vectorstore = create_vectorstore(chunks)
+#         vectorstore.save_local(cache_path)
+#         print(f"✅ Saved vectorstore to cache: {cache_path}")
+        
+#         total_time = time.time() - total_start
+#         print(f"🎉 TOTAL TIME: {total_time:.1f}s")
+#         return vectorstore
+#     finally:
+#         if cleanup_after_use:
+#             cleanup_chunks(chunks)
+#             if documents:
+#                 documents.clear()
+#             if temp_file and os.path.exists(temp_file):
+#                 os.unlink(temp_file)
+
+#function in which the faiss index is not saved 
 def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
     """Main processing pipeline with optional cleanup"""
     total_start = time.time()
@@ -304,16 +402,25 @@ def process_and_query_with_cleanup(document_url: str, query_function, *query_arg
         print("✅ Complete cleanup finished")
 
 def warmup_embeddings():
-    """Initialize embeddings model"""
-    print("🔥 Warming up embeddings...")
+    """Initialize embeddings and LLM models to reduce cold start latency"""
+    print("🔥 Warming up embeddings and LLM...")
     start = time.time()
     
+    # Warm up embeddings
     embeddings = get_embeddings()
-    # Process dummy text to initialize
     embeddings.embed_documents(["Insurance policy coverage and benefits."])
     
-    print(f"✅ Warmup done in {time.time()-start:.1f}s")
-
+    # Warm up LLM
+    llm = ChatGroq(
+        api_key=os.getenv("GROQ_API_KEY"),
+        model_name="llama-3.3-70b-versatile",
+        temperature=0.0,  # Match get_llm
+        max_tokens=400,   # Match get_llm
+        request_timeout=10
+    )
+    llm.invoke("Warmup query for LLM: What is an insurance policy?")
+    
+    print(f"✅ Warmup done in {time.time() - start:.1f}s")
 # Legacy compatibility
 def load_documents_from_directory(data_path):
     from langchain_community.document_loaders import DirectoryLoader, TextLoader

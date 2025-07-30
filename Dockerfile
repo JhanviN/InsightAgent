@@ -2,6 +2,8 @@
 FROM python:3.10-slim-buster AS builder
 
 WORKDIR /app
+RUN mkdir -p /app/faiss_index
+VOLUME /app/faiss_index
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --prefix=/install --no-cache-dir -r requirements.txt
 
