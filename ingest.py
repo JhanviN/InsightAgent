@@ -14,14 +14,16 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+import pdfplumber
+from langchain.schema import Document
 
 load_dotenv()
 
 # Keep your perfect chunking parameters
 CHUNK_SIZE = 1500           # Your perfect setting
 CHUNK_OVERLAP = 400        # Your perfect setting
-EMBED_MODEL = "all-MiniLM-L6-v2"
-MAX_CHUNKS = 500          # Increased slightly for better coverage
+EMBED_MODEL = "sentence-transformers/msmarco-distilbert-base-v4"
+MAX_CHUNKS = 1000          # Increased slightly for better coverage
 
 # Global cache with thread safety
 _embeddings_cache = None
@@ -167,59 +169,79 @@ def enhanced_content_cleaning(text: str) -> str:
     return '. '.join(clean_sentences) if clean_sentences else text
 
 def load_document(file_path: str):
-    """Enhanced document loading with better content filtering"""
     print("📄 Loading document...")
     start = time.time()
-    
     ext = os.path.splitext(file_path)[1].lower()
-    
+    docs = []
     try:
         if ext == '.pdf':
-            loader = PyPDFLoader(file_path)
-        elif ext in ['.docx', '.doc']:
-            loader = Docx2txtLoader(file_path)
+            with pdfplumber.open(file_path) as pdf:
+                for page_num, page in enumerate(pdf.pages):
+                    text = page.extract_text() or ""
+                    tables = page.extract_tables()
+                    table_content = ""
+                    for table in tables:
+                        for row in table:
+                            row_text = " | ".join(str(cell) for cell in row if cell is not None)
+                            table_content += f"{row_text}\n"
+                    content = text + "\n" + table_content
+                    if len(content.strip()) < 50:
+                        continue
+                    cleaned_content = enhanced_content_cleaning(content)
+                    if len(cleaned_content) < len(content) * 0.3:
+                        cleaned_content = content
+                    doc = Document(
+                        page_content=cleaned_content,
+                        metadata={
+                            'page': page_num + 1,
+                            'char_count': len(cleaned_content),
+                            'word_count': len(cleaned_content.split()),
+                            'source_file': os.path.basename(file_path),
+                            'has_table': bool(tables),
+                            'has_sub_limit': bool(re.search(r'sub-limit|\%\s*of\s*SI', content, re.IGNORECASE)),
+                            'has_exception': any(term in content.lower() for term in [
+                                'preferred provider network', 'ppn', 'exemption', 'listed procedure', 'not apply'
+                            ])
+                        }
+                    )
+                    # Detect plan-specific content
+                    for plan in ['Plan A', 'Plan B', 'Plan C']:
+                        if plan in content:
+                            doc.metadata['plan'] = plan
+                            break
+                    if doc.metadata.get('has_exception'):
+                        doc.metadata['exception_type'] = 'PPN' if 'ppn' in content.lower() or 'preferred provider network' in content.lower() else 'Other'
+                    docs.append(doc)
         else:
-            loader = PyPDFLoader(file_path)  # Default to PDF
-        
-        docs = loader.load()
-        
-        # Enhanced content filtering and cleaning
-        filtered_docs = []
-        for i, doc in enumerate(docs):
-            content = doc.page_content.strip()
-            
-            # Skip very short or empty pages
-            if len(content) < 50:
-                continue
-            
-            # Skip pages that are mostly non-text (tables of numbers, etc.)
-            word_count = len(content.split())
-            if word_count < 10:
-                continue
-            
-            # Enhanced content cleaning
-            cleaned_content = enhanced_content_cleaning(content)
-            
-            # Skip if cleaning removed too much content
-            if len(cleaned_content) < len(content) * 0.3:  # Less than 30% remained
-                cleaned_content = content  # Use original
-            
-            # Update document with cleaned content
-            doc.page_content = cleaned_content
-            
-            # Enhanced metadata
-            doc.metadata.update({
-                'page': i + 1,
-                'char_count': len(cleaned_content),
-                'word_count': len(cleaned_content.split()),
-                'source_file': os.path.basename(file_path)
-            })
-            
-            filtered_docs.append(doc)
-        
-        print(f"✅ Loaded {len(filtered_docs)} pages in {time.time()-start:.1f}s")
-        return filtered_docs
-        
+            loader = Docx2txtLoader(file_path)
+            docs = loader.load()
+            for i, doc in enumerate(docs):
+                content = doc.page_content.strip()
+                if len(content) < 50:
+                    continue
+                cleaned_content = enhanced_content_cleaning(content)
+                if len(cleaned_content) < len(content) * 0.3:
+                    cleaned_content = content
+                doc.page_content = cleaned_content
+                doc.metadata.update({
+                    'page': i + 1,
+                    'char_count': len(cleaned_content),
+                    'word_count': len(cleaned_content.split()),
+                    'source_file': os.path.basename(file_path),
+                    'has_sub_limit': bool(re.search(r'sub-limit|\%\s*of\s*SI', content, re.IGNORECASE)),
+                    'has_exception': any(term in content.lower() for term in [
+                        'preferred provider network', 'ppn', 'exemption', 'listed procedure', 'not apply'
+                    ])
+                })
+                for plan in ['Plan A', 'Plan B', 'Plan C']:
+                    if plan in content:
+                        doc.metadata['plan'] = plan
+                        break
+                if doc.metadata.get('has_exception'):
+                    doc.metadata['exception_type'] = 'PPN' if 'ppn' in content.lower() or 'preferred provider network' in content.lower() else 'Other'
+                docs[i] = doc
+        print(f"✅ Loaded {len(docs)} pages in {time.time()-start:.1f}s")
+        return docs
     except Exception as e:
         raise Exception(f"Document loading failed: {str(e)}")
 
@@ -227,12 +249,15 @@ def smart_chunk_documents(documents):
     """Enhanced smart chunking with your perfect settings"""
     print("✂️ Smart chunking with enhanced quality control...")
     start = time.time()
-    
+    for doc in documents:
+        if doc.metadata.get('has_table', False):
+            chunk_size = min(CHUNK_SIZE, 1000)  # Smaller chunks for tables
+            break
     # Use your perfect settings
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ". ", "! ", "? ", ", ", " "],  # Added comma separator
+        chunk_size=chunk_size,
+        chunk_overlap=800,
+        separators=["\n\n", "\n", ". ", "! ", "? ", ", ", " | ", " - "],
         keep_separator=True,
         add_start_index=True
     )
@@ -352,7 +377,6 @@ def create_vectorstore(chunks):
     return vectorstore
 
 def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
-    """Enhanced document processing with caching and quality improvements"""
     total_start = time.time()
     temp_file = None
     chunks = None
@@ -360,27 +384,29 @@ def process_document_from_url(document_url: str, cleanup_after_use: bool = True,
     url_hash = hashlib.md5(document_url.encode()).hexdigest()
     cache_path = f"/app/faiss_index/{url_hash}"
     
-    # Create cache directory
     os.makedirs("/app/faiss_index", exist_ok=True)
     embeddings = get_embeddings()
     
-    # Check for cached vectorstore
-    if os.path.exists(cache_path):
-        try:
-            vectorstore = FAISS.load_local(cache_path, embeddings, allow_dangerous_deserialization=True)
-            print(f"✅ Loaded cached vectorstore in {time.time() - total_start:.1f}s")
-            return vectorstore
-        except Exception as e:
-            print(f"⚠️ Cache load failed: {e}, processing fresh...")
-    
     try:
-        # Enhanced processing pipeline
         temp_file = download_document(document_url)
-        documents = load_document(temp_file)
-        chunks = smart_chunk_documents(documents)
-        vectorstore = create_vectorstore(chunks)
+        print(f"📂 Temp file: {temp_file}, Size: {os.path.getsize(temp_file) / (1024 * 1024):.1f}MB")
         
-        # Save to cache for future use
+        documents = load_document(temp_file)
+        print(f"📜 Loaded {len(documents)} documents")
+        for i, doc in enumerate(documents[:3]):  # Log first 3 docs
+            print(f"Doc {i+1}: {doc.page_content[:100]}... Metadata: {doc.metadata}")
+        
+        chunks = smart_chunk_documents(documents)
+        print(f"✂️ Created {len(chunks)} chunks")
+        for i, chunk in enumerate(chunks[:3]):  # Log first 3 chunks
+            print(f"Chunk {i+1}: {chunk.page_content[:100]}... Metadata: {chunk.metadata}")
+        
+        if not chunks:
+            raise Exception("No chunks created, check document loading or chunking")
+        
+        vectorstore = create_vectorstore(chunks)
+        print(f"🧠 Vector store created with {vectorstore.index.ntotal} vectors")
+        
         try:
             vectorstore.save_local(cache_path)
             print(f"✅ Saved vectorstore to cache: {cache_path}")
@@ -397,7 +423,6 @@ def process_document_from_url(document_url: str, cleanup_after_use: bool = True,
         print(f"❌ Enhanced pipeline error: {str(e)}")
         raise
     finally:
-        # Cleanup intermediate data
         if cleanup_after_use:
             if chunks:
                 cleanup_chunks(chunks)
@@ -414,7 +439,6 @@ def process_document_from_url(document_url: str, cleanup_after_use: bool = True,
                     print("🧹 Cleaned up temp file")
                 except:
                     pass
-
 def process_and_query_with_cleanup(document_url: str, query_function, *query_args):
     """
     Enhanced process document, run queries, then clean up everything
@@ -526,25 +550,49 @@ def validate_document_quality(file_path: str) -> dict:
         return {'estimated_quality': 'unknown'}
 
 # Legacy compatibility
-def load_documents_from_directory(data_path):
-    """Enhanced directory loading with quality filtering"""
-    from langchain_community.document_loaders import DirectoryLoader
-    
-    loader = DirectoryLoader(
-        data_path, 
-        glob="**/*.pdf", 
-        loader_cls=PyPDFLoader,
-        show_progress=True
-    )
-    docs = loader.load()
-    
-    # Apply enhanced content cleaning to directory docs
-    enhanced_docs = []
-    for doc in docs:
-        cleaned_content = enhanced_content_cleaning(doc.page_content)
-        if len(cleaned_content) > 50:  # Filter out very short content
-            doc.page_content = cleaned_content
-            enhanced_docs.append(doc)
-    
-    print(f"✅ Enhanced directory loading: {len(enhanced_docs)} quality documents")
-    return enhanced_docs
+def load_document(file_path: str):
+    print("📄 Loading document...")
+    start = time.time()
+    ext = os.path.splitext(file_path)[1].lower()
+    docs = []
+    try:
+        if ext == '.pdf':
+            with pdfplumber.open(file_path) as pdf:
+                for page_num, page in enumerate(pdf.pages):
+                    # Extract text
+                    text = page.extract_text() or ""
+                    # Extract tables
+                    tables = page.extract_tables()
+                    table_content = ""
+                    for table in tables:
+                        # Convert table to text, preserving structure
+                        for row in table:
+                            table_content += " | ".join(str(cell) for cell in row if cell) + "\n"
+                    content = text + "\n" + table_content
+                    if len(content.strip()) < 50:
+                        continue
+                    cleaned_content = enhanced_content_cleaning(content)
+                    if len(cleaned_content) < len(content) * 0.3:
+                        cleaned_content = content
+                    doc = Document(
+                        page_content=cleaned_content,
+                        metadata={
+                            'page': page_num + 1,
+                            'char_count': len(cleaned_content),
+                            'word_count': len(cleaned_content.split()),
+                            'source_file': os.path.basename(file_path),
+                            'has_table': bool(tables)
+                        }
+                    )
+                    # Detect Plan A
+                    if "Plan A" in content:
+                        doc.metadata['plan'] = "Plan A"
+                    docs.append(doc)
+        else:
+            loader = Docx2txtLoader(file_path)
+            docs = loader.load()
+            ...
+        print(f"✅ Loaded {len(docs)} pages in {time.time()-start:.1f}s")
+        return docs
+    except Exception as e:
+        raise Exception(f"Document loading failed: {str(e)}")

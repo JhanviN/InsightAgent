@@ -18,7 +18,7 @@ load_dotenv()
 
 # Configuration - Enhanced for accuracy
 MODEL_NAME = "llama-3.3-70b-versatile"
-EMBED_MODEL = "all-MiniLM-L6-v2"
+EMBED_MODEL = "sentence-transformers/msmarco-distilbert-base-v4"
 INDEX_PATH = "faiss_index"
 
 # Global LLM cache
@@ -127,17 +127,16 @@ RESPONSE:"""
 )
 
 def enhanced_retrieval_with_multiple_strategies(vectorstore, query_text: str, max_docs: int = 8) -> List[Document]:
-    """Multi-strategy retrieval for maximum coverage"""
     all_docs = []
     seen_content = set()
     
-    # Strategy 1: MMR for diversity (your current approach)
+    # Strategy 1: MMR for diversity
     try:
         retriever_mmr = vectorstore.as_retriever(
             search_type="mmr", 
-            search_kwargs={"k": 4, "lambda_mult": 0.3}  # More diversity
+            search_kwargs={"k": 4, "lambda_mult": 0.3}
         )
-        docs_mmr = retriever_mmr.get_relevant_documents(query_text)
+        docs_mmr = retriever_mmr.invoke(query_text)  # Updated to invoke
         for doc in docs_mmr:
             content_hash = hash(doc.page_content[:100])
             if content_hash not in seen_content:
@@ -146,17 +145,13 @@ def enhanced_retrieval_with_multiple_strategies(vectorstore, query_text: str, ma
     except Exception as e:
         print(f"MMR retrieval failed: {e}")
     
-    # Strategy 2: Lower threshold similarity 
+    # Strategy 2: Lower threshold similarity
     try:
         retriever_sim = vectorstore.as_retriever(
             search_type="similarity_score_threshold",
-            search_kwargs={
-                "k": 6,
-                "score_threshold": 0.1,  # Much lower threshold
-                "fetch_k": 12  # Cast wider net
-            }
+            search_kwargs={"k": 6, "score_threshold": 0.1, "fetch_k": 12}
         )
-        docs_sim = retriever_sim.get_relevant_documents(query_text)
+        docs_sim = retriever_sim.invoke(query_text)  # Updated to invoke
         for doc in docs_sim:
             content_hash = hash(doc.page_content[:100])
             if content_hash not in seen_content:
@@ -164,10 +159,9 @@ def enhanced_retrieval_with_multiple_strategies(vectorstore, query_text: str, ma
                 all_docs.append(doc)
     except Exception as e:
         print(f"Similarity threshold failed: {e}")
-        # Fallback to basic similarity
         try:
             retriever_basic = vectorstore.as_retriever(search_kwargs={"k": 6})
-            docs_basic = retriever_basic.get_relevant_documents(query_text)
+            docs_basic = retriever_basic.invoke(query_text)  # Updated to invoke
             for doc in docs_basic:
                 content_hash = hash(doc.page_content[:100])
                 if content_hash not in seen_content:
@@ -176,13 +170,13 @@ def enhanced_retrieval_with_multiple_strategies(vectorstore, query_text: str, ma
         except Exception as e2:
             print(f"Basic retrieval failed: {e2}")
     
-    # Strategy 3: Try with preprocessed query if original didn't get enough results
+    # Strategy 3: Preprocessed query
     if len(all_docs) < 4:
         try:
             processed_query = preprocess_query(query_text)
             if processed_query != query_text:
                 retriever_processed = vectorstore.as_retriever(search_kwargs={"k": 4})
-                docs_processed = retriever_processed.get_relevant_documents(processed_query)
+                docs_processed = retriever_processed.invoke(processed_query)  # Updated to invoke
                 for doc in docs_processed:
                     content_hash = hash(doc.page_content[:100])
                     if content_hash not in seen_content:
@@ -192,7 +186,6 @@ def enhanced_retrieval_with_multiple_strategies(vectorstore, query_text: str, ma
             print(f"Processed query retrieval failed: {e}")
     
     return all_docs[:max_docs]
-
 def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_after=True) -> str:
     """Enhanced query analysis with multiple attempts and fallbacks"""
     try:
