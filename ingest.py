@@ -22,7 +22,7 @@ load_dotenv()
 # Keep your perfect chunking parameters
 CHUNK_SIZE = 1500           # Your perfect setting
 CHUNK_OVERLAP = 400        # Your perfect setting
-EMBED_MODEL = "sentence-transformers/msmarco-distilbert-base-v4"
+EMBED_MODEL = "all-MiniLM-L6-v2"
 MAX_CHUNKS = 1000          # Increased slightly for better coverage
 
 # Global cache with thread safety
@@ -249,6 +249,7 @@ def smart_chunk_documents(documents):
     """Enhanced smart chunking with your perfect settings"""
     print("✂️ Smart chunking with enhanced quality control...")
     start = time.time()
+    chunk_size = CHUNK_SIZE
     for doc in documents:
         if doc.metadata.get('has_table', False):
             chunk_size = min(CHUNK_SIZE, 1000)  # Smaller chunks for tables
@@ -256,7 +257,7 @@ def smart_chunk_documents(documents):
     # Use your perfect settings
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
-        chunk_overlap=800,
+        chunk_overlap=CHUNK_OVERLAP,
         separators=["\n\n", "\n", ". ", "! ", "? ", ", ", " | ", " - "],
         keep_separator=True,
         add_start_index=True
@@ -282,8 +283,8 @@ def smart_chunk_documents(documents):
         skip_patterns = [
             r'^\s*(page\s+\d+|chapter\s+\d+|section\s+\d+)\s*',
             r'^\s*(table\s+of\s+contents|index|bibliography)\s*',
-            r'^\s*\d+\s*,  # Just numbers',
-            r'^\s*[ivxlcdm]+\s*,  # Roman numerals only'
+            r'^\s*\d+\s*$',  # Just numbers
+            r'^\s*[ivxlcdm]+\s*$',  # Roman numerals only
         ]
         
         should_skip = any(re.match(pattern, content_lower) for pattern in skip_patterns)
@@ -347,33 +348,16 @@ def smart_chunk_documents(documents):
     return quality_chunks
 
 def create_vectorstore(chunks):
-    """Enhanced vector store creation with optimization"""
-    print(f"🧠 Creating enhanced vector store from {len(chunks)} chunks...")
+    """Create vector store without batch processing"""
+    print(f"🧠 Creating vector store from {len(chunks)} chunks...")
     start = time.time()
     
     embeddings = get_embeddings()
     
-    # Create vector store with batching for stability
-    batch_size = 50  # Process in smaller batches
-    all_vectorstores = []
+    # Create vector store directly from all chunks at once
+    vectorstore = FAISS.from_documents(chunks, embeddings)
     
-    for i in range(0, len(chunks), batch_size):
-        batch_chunks = chunks[i:i + batch_size]
-        print(f"   Processing batch {i//batch_size + 1}/{(len(chunks) + batch_size - 1)//batch_size}")
-        
-        if i == 0:
-            # Create initial vectorstore
-            vectorstore = FAISS.from_documents(batch_chunks, embeddings)
-        else:
-            # Create batch vectorstore and merge
-            batch_vectorstore = FAISS.from_documents(batch_chunks, embeddings)
-            vectorstore.merge_from(batch_vectorstore)
-            
-            # Clean up batch vectorstore
-            del batch_vectorstore
-            gc.collect()
-    
-    print(f"✅ Enhanced vector store ready in {time.time()-start:.1f}s")
+    print(f"✅ Vector store ready in {time.time()-start:.1f}s")
     return vectorstore
 
 def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
@@ -439,6 +423,7 @@ def process_document_from_url(document_url: str, cleanup_after_use: bool = True,
                     print("🧹 Cleaned up temp file")
                 except:
                     pass
+
 def process_and_query_with_cleanup(document_url: str, query_function, *query_args):
     """
     Enhanced process document, run queries, then clean up everything
@@ -548,51 +533,3 @@ def validate_document_quality(file_path: str) -> dict:
     except Exception as e:
         print(f"⚠️ Quality validation failed: {e}")
         return {'estimated_quality': 'unknown'}
-
-# Legacy compatibility
-def load_document(file_path: str):
-    print("📄 Loading document...")
-    start = time.time()
-    ext = os.path.splitext(file_path)[1].lower()
-    docs = []
-    try:
-        if ext == '.pdf':
-            with pdfplumber.open(file_path) as pdf:
-                for page_num, page in enumerate(pdf.pages):
-                    # Extract text
-                    text = page.extract_text() or ""
-                    # Extract tables
-                    tables = page.extract_tables()
-                    table_content = ""
-                    for table in tables:
-                        # Convert table to text, preserving structure
-                        for row in table:
-                            table_content += " | ".join(str(cell) for cell in row if cell) + "\n"
-                    content = text + "\n" + table_content
-                    if len(content.strip()) < 50:
-                        continue
-                    cleaned_content = enhanced_content_cleaning(content)
-                    if len(cleaned_content) < len(content) * 0.3:
-                        cleaned_content = content
-                    doc = Document(
-                        page_content=cleaned_content,
-                        metadata={
-                            'page': page_num + 1,
-                            'char_count': len(cleaned_content),
-                            'word_count': len(cleaned_content.split()),
-                            'source_file': os.path.basename(file_path),
-                            'has_table': bool(tables)
-                        }
-                    )
-                    # Detect Plan A
-                    if "Plan A" in content:
-                        doc.metadata['plan'] = "Plan A"
-                    docs.append(doc)
-        else:
-            loader = Docx2txtLoader(file_path)
-            docs = loader.load()
-            ...
-        print(f"✅ Loaded {len(docs)} pages in {time.time()-start:.1f}s")
-        return docs
-    except Exception as e:
-        raise Exception(f"Document loading failed: {str(e)}")
