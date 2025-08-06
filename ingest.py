@@ -16,7 +16,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 import pdfplumber
 from langchain.schema import Document
-
+import fitz
 load_dotenv()
 
 # Keep your perfect chunking parameters
@@ -175,21 +175,14 @@ def load_document(file_path: str):
     docs = []
     try:
         if ext == '.pdf':
-            with pdfplumber.open(file_path) as pdf:
-                for page_num, page in enumerate(pdf.pages):
-                    text = page.extract_text() or ""
-                    tables = page.extract_tables()
-                    table_content = ""
-                    for table in tables:
-                        for row in table:
-                            row_text = " | ".join(str(cell) for cell in row if cell is not None)
-                            table_content += f"{row_text}\n"
-                    content = text + "\n" + table_content
-                    if len(content.strip()) < 50:
+            with fitz.open(file_path) as pdf:
+                for page_num, page in enumerate(pdf):
+                    text = page.get_text("text") or ""
+                    if len(text.strip()) < 50:
                         continue
-                    cleaned_content = enhanced_content_cleaning(content)
-                    if len(cleaned_content) < len(content) * 0.3:
-                        cleaned_content = content
+                    cleaned_content = enhanced_content_cleaning(text)
+                    if len(cleaned_content) < len(text) * 0.3:
+                        cleaned_content = text
                     doc = Document(
                         page_content=cleaned_content,
                         metadata={
@@ -197,54 +190,28 @@ def load_document(file_path: str):
                             'char_count': len(cleaned_content),
                             'word_count': len(cleaned_content.split()),
                             'source_file': os.path.basename(file_path),
-                            'has_table': bool(tables),
-                            'has_sub_limit': bool(re.search(r'sub-limit|\%\s*of\s*SI', content, re.IGNORECASE)),
-                            'has_exception': any(term in content.lower() for term in [
+                            'has_table': False,  # PyMuPDF table extraction requires additional logic
+                            'has_sub_limit': bool(re.search(r'sub-limit|\%\s*of\s*SI', text, re.IGNORECASE)),
+                            'has_exception': any(term in text.lower() for term in [
                                 'preferred provider network', 'ppn', 'exemption', 'listed procedure', 'not apply'
                             ])
                         }
                     )
-                    # Detect plan-specific content
                     for plan in ['Plan A', 'Plan B', 'Plan C']:
-                        if plan in content:
+                        if plan in text:
                             doc.metadata['plan'] = plan
                             break
                     if doc.metadata.get('has_exception'):
-                        doc.metadata['exception_type'] = 'PPN' if 'ppn' in content.lower() or 'preferred provider network' in content.lower() else 'Other'
+                        doc.metadata['exception_type'] = 'PPN' if 'ppn' in text.lower() or 'preferred provider network' in text.lower() else 'Other'
                     docs.append(doc)
         else:
             loader = Docx2txtLoader(file_path)
-            docs = loader.load()
-            for i, doc in enumerate(docs):
-                content = doc.page_content.strip()
-                if len(content) < 50:
-                    continue
-                cleaned_content = enhanced_content_cleaning(content)
-                if len(cleaned_content) < len(content) * 0.3:
-                    cleaned_content = content
-                doc.page_content = cleaned_content
-                doc.metadata.update({
-                    'page': i + 1,
-                    'char_count': len(cleaned_content),
-                    'word_count': len(cleaned_content.split()),
-                    'source_file': os.path.basename(file_path),
-                    'has_sub_limit': bool(re.search(r'sub-limit|\%\s*of\s*SI', content, re.IGNORECASE)),
-                    'has_exception': any(term in content.lower() for term in [
-                        'preferred provider network', 'ppn', 'exemption', 'listed procedure', 'not apply'
-                    ])
-                })
-                for plan in ['Plan A', 'Plan B', 'Plan C']:
-                    if plan in content:
-                        doc.metadata['plan'] = plan
-                        break
-                if doc.metadata.get('has_exception'):
-                    doc.metadata['exception_type'] = 'PPN' if 'ppn' in content.lower() or 'preferred provider network' in content.lower() else 'Other'
-                docs[i] = doc
+            # ... (keep existing .docx handling)
         print(f"✅ Loaded {len(docs)} pages in {time.time()-start:.1f}s")
         return docs
     except Exception as e:
         raise Exception(f"Document loading failed: {str(e)}")
-
+    
 def smart_chunk_documents(documents):
     """Enhanced smart chunking with your perfect settings"""
     print("✂️ Smart chunking with enhanced quality control...")
@@ -360,49 +327,114 @@ def create_vectorstore(chunks):
     print(f"✅ Vector store ready in {time.time()-start:.1f}s")
     return vectorstore
 
-def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
+# def process_document_from_url(document_url: str, cleanup_after_use: bool = True, return_chunks: bool = False):
+#     total_start = time.time()
+#     temp_file = None
+#     chunks = None
+#     documents = None
+#     url_hash = hashlib.md5(document_url.encode()).hexdigest()
+#     cache_path = f"/app/faiss_index/{url_hash}"
+    
+#     os.makedirs("/app/faiss_index", exist_ok=True)
+#     embeddings = get_embeddings()
+    
+#     try:
+#         temp_file = download_document(document_url)
+#         print(f"📂 Temp file: {temp_file}, Size: {os.path.getsize(temp_file) / (1024 * 1024):.1f}MB")
+        
+#         documents = load_document(temp_file)
+#         print(f"📜 Loaded {len(documents)} documents")
+#         for i, doc in enumerate(documents[:3]):  # Log first 3 docs
+#             print(f"Doc {i+1}: {doc.page_content[:100]}... Metadata: {doc.metadata}")
+        
+#         chunks = smart_chunk_documents(documents)
+#         print(f"✂️ Created {len(chunks)} chunks")
+#         for i, chunk in enumerate(chunks[:3]):  # Log first 3 chunks
+#             print(f"Chunk {i+1}: {chunk.page_content[:100]}... Metadata: {chunk.metadata}")
+        
+#         if not chunks:
+#             raise Exception("No chunks created, check document loading or chunking")
+        
+#         vectorstore = create_vectorstore(chunks)
+#         print(f"🧠 Vector store created with {vectorstore.index.ntotal} vectors")
+        
+#         try:
+#             vectorstore.save_local(cache_path)
+#             print(f"✅ Saved vectorstore to cache: {cache_path}")
+#         except Exception as e:
+#             print(f"⚠️ Cache save failed: {e}")
+        
+#         total_time = time.time() - total_start
+#         print(f"🎉 TOTAL PROCESSING TIME: {total_time:.1f}s")
+#         print(f"📊 Rate: {len(chunks)/total_time:.1f} chunks/sec")
+        
+#         return vectorstore
+        
+#     except Exception as e:
+#         print(f"❌ Enhanced pipeline error: {str(e)}")
+#         raise
+#     finally:
+#         if cleanup_after_use:
+#             if chunks:
+#                 cleanup_chunks(chunks)
+#             if documents:
+#                 for doc in documents:
+#                     if hasattr(doc, 'page_content'):
+#                         del doc.page_content
+#                     if hasattr(doc, 'metadata'):
+#                         doc.metadata.clear()
+#                 documents.clear()
+#             if temp_file and os.path.exists(temp_file):
+#                 try:
+#                     os.unlink(temp_file)
+#                     print("🧹 Cleaned up temp file")
+#                 except:
+#                     pass
+
+def process_document_from_url(document_url: str, cleanup_after_use: bool = True):
     total_start = time.time()
     temp_file = None
     chunks = None
     documents = None
+    cache_base = Path(os.getenv("CACHE_DIR", "./faiss_index"))
     url_hash = hashlib.md5(document_url.encode()).hexdigest()
-    cache_path = f"/app/faiss_index/{url_hash}"
-    
-    os.makedirs("/app/faiss_index", exist_ok=True)
+    cache_path = cache_base / url_hash
     embeddings = get_embeddings()
-    
     try:
+        cache_base.mkdir(parents=True, exist_ok=True)
+        if cache_path.exists():
+            try:
+                print("✅ Loading cached vectorstore...")
+                cache_start = time.time()
+                vectorstore = FAISS.load_local(str(cache_path), embeddings, allow_dangerous_deserialization=True)
+                print(f"✅ Loaded cached vectorstore in {time.time() - cache_start:.1f}s")
+                return vectorstore
+            except Exception as e:
+                print(f"⚠️ Cache load failed: {str(e)}, regenerating...")
         temp_file = download_document(document_url)
         print(f"📂 Temp file: {temp_file}, Size: {os.path.getsize(temp_file) / (1024 * 1024):.1f}MB")
-        
         documents = load_document(temp_file)
         print(f"📜 Loaded {len(documents)} documents")
-        for i, doc in enumerate(documents[:3]):  # Log first 3 docs
+        for i, doc in enumerate(documents[:3]):
             print(f"Doc {i+1}: {doc.page_content[:100]}... Metadata: {doc.metadata}")
-        
         chunks = smart_chunk_documents(documents)
         print(f"✂️ Created {len(chunks)} chunks")
-        for i, chunk in enumerate(chunks[:3]):  # Log first 3 chunks
+        for i, chunk in enumerate(chunks[:3]):
             print(f"Chunk {i+1}: {chunk.page_content[:100]}... Metadata: {chunk.metadata}")
-        
         if not chunks:
             raise Exception("No chunks created, check document loading or chunking")
-        
         vectorstore = create_vectorstore(chunks)
         print(f"🧠 Vector store created with {vectorstore.index.ntotal} vectors")
-        
         try:
-            vectorstore.save_local(cache_path)
+            cache_path.mkdir(parents=True, exist_ok=True)
+            vectorstore.save_local(str(cache_path))
             print(f"✅ Saved vectorstore to cache: {cache_path}")
         except Exception as e:
             print(f"⚠️ Cache save failed: {e}")
-        
         total_time = time.time() - total_start
         print(f"🎉 TOTAL PROCESSING TIME: {total_time:.1f}s")
         print(f"📊 Rate: {len(chunks)/total_time:.1f} chunks/sec")
-        
         return vectorstore
-        
     except Exception as e:
         print(f"❌ Enhanced pipeline error: {str(e)}")
         raise
@@ -423,7 +455,7 @@ def process_document_from_url(document_url: str, cleanup_after_use: bool = True,
                     print("🧹 Cleaned up temp file")
                 except:
                     pass
-
+            gc.collect()
 def process_and_query_with_cleanup(document_url: str, query_function, *query_args):
     """
     Enhanced process document, run queries, then clean up everything

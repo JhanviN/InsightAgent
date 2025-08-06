@@ -3,17 +3,15 @@ import json
 import time
 from dotenv import load_dotenv
 import gc
-import asyncio
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
-from concurrent.futures import ThreadPoolExecutor
 import re
 from typing import List, Dict, Any
-
+import ray
 load_dotenv()
 
 # Configuration - Enhanced for accuracy
@@ -186,6 +184,7 @@ def enhanced_retrieval_with_multiple_strategies(vectorstore, query_text: str, ma
             print(f"Processed query retrieval failed: {e}")
     
     return all_docs[:max_docs]
+
 def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_after=True) -> str:
     """Enhanced query analysis with multiple attempts and fallbacks"""
     try:
@@ -270,42 +269,6 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_af
         if cleanup_after:
             gc.collect()
 
-# Enhanced batch processing
-async def analyze_multiple_queries_fast(questions: list, vectorstore, cleanup_after=True) -> list:
-    """Enhanced batch processing with better accuracy"""
-    async def process_question(question):
-        start = time.time()
-        try:
-            # Use enhanced single query processing
-            answer = analyze_query_with_vectorstore_fast(question, vectorstore, cleanup_after=False)
-            print(f"✅ [Q{question[:30]}...] Done in {time.time() - start:.1f}s")
-            return answer
-        except Exception as e:
-            print(f"❌ [Q{question[:30]}...] Error: {str(e)}")
-            return f"Error processing question: {str(e)}"
-    
-    # Process in smaller batches for stability
-    answers = []
-    batch_size = 2  # Smaller batches for accuracy
-    
-    for i in range(0, len(questions), batch_size):
-        batch = questions[i:i + batch_size]
-        tasks = [process_question(q) for q in batch]
-        batch_answers = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Handle exceptions
-        batch_answers = [str(ans) if isinstance(ans, Exception) else ans for ans in batch_answers]
-        answers.extend(batch_answers)
-        
-        # Brief pause between batches
-        if i + batch_size < len(questions):
-            await asyncio.sleep(0.3)
-    
-    if cleanup_after:
-        gc.collect()
-    
-    return answers
-
 def analyze_query_with_sources_fast(query_text: str, vectorstore, cleanup_after=True) -> dict:
     """Enhanced query with detailed source information"""
     try:
@@ -385,7 +348,6 @@ def score_answer_quality(answer: str, question: str) -> int:
     
     return min(score, 100)
 
-# Maintain compatibility with existing interface
 def cleanup_chain_components(chain=None, retriever=None):
     """Clean up chain and retriever components"""
     try:
@@ -411,42 +373,27 @@ def query_with_auto_cleanup(vectorstore, query_text: str) -> str:
     """Wrapper function that automatically cleans up after single query"""
     return analyze_query_with_vectorstore_fast(query_text, vectorstore, cleanup_after=True)
 
-def batch_query_with_auto_cleanup(vectorstore, questions: list) -> list:
-    """Wrapper function that automatically cleans up after batch queries"""
-    return asyncio.run(analyze_multiple_queries_fast(questions, vectorstore, cleanup_after=True))
-
 def validate_answer_quality(answer: str, question: str) -> bool:
     """Enhanced answer quality validation"""
     score = score_answer_quality(answer, question)
     return score > 25  # More lenient threshold
 
-def test_query_performance(vectorstore, test_questions: list):
-    """Enhanced performance testing with detailed metrics"""
-    print(f"🧪 Testing with {len(test_questions)} questions...")
+def test_single_query_performance(vectorstore, test_question: str):
+    """Test performance for a single query"""
+    print(f"🧪 Testing single question: {test_question[:50]}...")
     start = time.time()
     
-    answers = batch_query_with_auto_cleanup(vectorstore, test_questions)
+    answer = query_with_auto_cleanup(vectorstore, test_question)
     
     total_time = time.time() - start
-    avg_time = total_time / len(test_questions)
+    quality_score = score_answer_quality(answer, test_question)
     
-    # Detailed quality analysis
-    quality_scores = [score_answer_quality(ans, test_questions[i]) for i, ans in enumerate(answers)]
-    avg_score = sum(quality_scores) / len(quality_scores)
-    high_quality_count = sum(1 for score in quality_scores if score > 70)
-    medium_quality_count = sum(1 for score in quality_scores if 40 <= score <= 70)
-    low_quality_count = sum(1 for score in quality_scores if score < 40)
+    print(f"📊 Single Query Performance:")
+    print(f"   Time taken: {total_time:.2f}s")
+    print(f"   Quality score: {quality_score}/100")
+    print(f"   Answer: {answer}")
     
-    print(f"📊 Enhanced Performance Results:")
-    print(f"   Total time: {total_time:.1f}s")
-    print(f"   Avg per question: {avg_time:.1f}s")
-    print(f"   Average quality score: {avg_score:.1f}/100")
-    print(f"   High quality (70+): {high_quality_count}/{len(test_questions)} ({high_quality_count/len(test_questions)*100:.1f}%)")
-    print(f"   Medium quality (40-70): {medium_quality_count}/{len(test_questions)} ({medium_quality_count/len(test_questions)*100:.1f}%)")
-    print(f"   Low quality (<40): {low_quality_count}/{len(test_questions)} ({low_quality_count/len(test_questions)*100:.1f}%)")
-    print(f"   Throughput: {len(test_questions)/total_time:.1f} q/sec")
-    
-    return answers
+    return answer
 
 # Legacy support with enhanced accuracy
 def analyze_query(query_text: str) -> str:
@@ -505,25 +452,31 @@ Instructions:
 Answer:
 """
 )
-# Example usage functions that demonstrate the cleanup pattern
-# def process_single_query_example(vectorstore, question: str):
-#     """Example: Process single query with automatic cleanup"""
-#     print(f"🔍 Processing: {question}")
-    
-#     answer = query_with_auto_cleanup(vectorstore, question)
-    
-#     print(f"✅ Answer: {answer}")
-#     print("🧹 Memory cleaned automatically")
-    
-#     return answer
 
-# def process_batch_queries_example(vectorstore, questions: list):
-#     """Example: Process multiple queries with automatic cleanup"""
-#     print(f"🔍 Processing {len(questions)} questions...")
+def process_single_query_example(vectorstore, question: str):
+    """Example: Process single query with automatic cleanup"""
+    print(f"🔍 Processing: {question}")
     
-#     answers = batch_query_with_auto_cleanup(vectorstore, questions)
+    answer = query_with_auto_cleanup(vectorstore, question)
     
-#     print(f"✅ Processed {len(answers)} answers")
-#     print("🧹 Memory cleaned automatically")
+    print(f"✅ Answer: {answer}")
+    print("🧹 Memory cleaned automatically")
     
-#     return answers
+    return answer
+
+@ray.remote(num_cpus=0.5)
+def process_single_query(query_text: str, vectorstore):
+    return analyze_query_with_vectorstore_fast(query_text, vectorstore, cleanup_after=False)
+
+def process_queries_batch(vectorstore, questions: List[str], batch_size: int = 5) -> List[str]:
+    start = time.time()
+    print(f"🔍 Processing {len(questions)} questions in batches...")
+    answers = []
+    for i in range(0, len(questions), batch_size):
+        batch = questions[i:i + batch_size]
+        futures = [process_single_query.remote(q, vectorstore) for q in batch]
+        batch_answers = ray.get(futures)
+        answers.extend(batch_answers)
+        print(f"✅ Processed batch {i//batch_size + 1}/{len(questions)//batch_size + 1}")
+    print(f"✅ Batch processing completed in {time.time() - start:.1f}s")
+    return answers
