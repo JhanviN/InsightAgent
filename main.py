@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 from ingest import process_document_from_url, warmup_embeddings
-from query import analyze_query_with_vectorstore_fast, analyze_multiple_queries_fast
+from query import analyze_query_with_vectorstore_fast
 
 load_dotenv()
 EXPECTED_TOKEN = os.getenv("AUTH_TOKEN")
@@ -52,9 +52,6 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     answers: List[str]
-    # processing_time: float
-    # total_questions: int
-    # status: str = "success"
 
 # Auth helper
 def verify_auth(authorization: str) -> str:
@@ -77,7 +74,7 @@ def read_root():
         "features": [
             "Smart document chunking",
             "Cached embeddings", 
-            "Batch query processing",
+            "Sequential query processing",
             "Insurance domain optimization"
         ]
     }
@@ -98,7 +95,7 @@ async def process_document_queries(
 ):
     """
     Main endpoint: Process document and answer questions
-    Optimized for accuracy and speed
+    Optimized for accuracy with sequential processing
     """
     start_time = time.time()
     
@@ -121,32 +118,33 @@ async def process_document_queries(
         doc_time = time.time() - doc_start
         print(f"✅ Document processed in {doc_time:.1f}s")
         
-        # Step 2: Process questions in batch (more efficient)
+        # Step 2: Process questions sequentially
         print("🔍 Processing questions...")
         query_start = time.time()
-        #changed code acc to async query.py function
-        # raw_answers = await loop.run_in_executor(
-        #     executor,
-        #     analyze_multiple_queries_fast,
-        #     request.questions,
-        #     vectorstore
-        # )
-        raw_answers = await analyze_multiple_queries_fast(request.questions, vectorstore)
-        query_time = time.time() - query_start
-        print(f"✅ Questions processed in {query_time:.1f}s")
         
-        # Step 3: Clean and format answers
         answers = []
-        for result in raw_answers:
-            if isinstance(result, str):
+        for i, question in enumerate(request.questions):
+            print(f"  Processing question {i+1}/{len(request.questions)}")
+            
+            # Process each question individually
+            raw_answer = await loop.run_in_executor(
+                executor,
+                analyze_query_with_vectorstore_fast,
+                question,
+                vectorstore,
+                False  # cleanup_after parameter
+            )
+            
+            # Clean and format answer
+            if isinstance(raw_answer, str):
                 # Try to parse JSON response
                 try:
-                    parsed = json.loads(result)
-                    clean_answer = parsed.get("justification", result)
+                    parsed = json.loads(raw_answer)
+                    clean_answer = parsed.get("justification", raw_answer)
                 except json.JSONDecodeError:
-                    clean_answer = result
+                    clean_answer = raw_answer
             else:
-                clean_answer = str(result)
+                clean_answer = str(raw_answer)
             
             # Basic cleaning
             clean_answer = clean_answer.strip()
@@ -155,17 +153,15 @@ async def process_document_queries(
             
             answers.append(clean_answer)
         
+        query_time = time.time() - query_start
+        print(f"✅ Questions processed in {query_time:.1f}s")
+        
         total_time = time.time() - start_time
         
         print(f"🎉 Request completed in {total_time:.1f}s")
         print(f"📊 Breakdown - Doc: {doc_time:.1f}s, Query: {query_time:.1f}s")
         
-        return QueryResponse(
-            answers=answers,
-            # processing_time=round(total_time, 2),
-            # total_questions=len(request.questions),
-            # status="success"
-        )
+        return QueryResponse(answers=answers)
         
     except Exception as e:
         error_time = time.time() - start_time
@@ -173,10 +169,7 @@ async def process_document_queries(
         
         # Return partial response for debugging
         return QueryResponse(
-            answers=[f"Processing error: {str(e)}"] * len(request.questions),
-            # processing_time=round(error_time, 2),
-            # total_questions=len(request.questions),
-            # status="error"
+            answers=[f"Processing error: {str(e)}"] * len(request.questions)
         )
 
 # Performance monitoring endpoint
@@ -187,14 +180,14 @@ def get_performance_stats():
             "Smaller chunks (800 chars) for accuracy",
             "Higher overlap (200) for context",
             "Score threshold retrieval",
-            "Batch query processing",
+            "Sequential query processing",
             "Insurance-specific prompts",
             "Cached LLM connections"
         ],
         "expected_performance": {
             "document_processing": "10-25s",
             "query_processing": "1-3s per question",
-            "batch_10_questions": "15-35s total"
+            "sequential_10_questions": "10-30s for queries"
         },
         "model_info": {
             "embeddings": "all-MiniLM-L6-v2",
