@@ -7,9 +7,11 @@ pydantic==2.11.7
 python-dotenv==1.1.1
 requests==2.32.4
 sentence-transformers
-pypdf==3.9.1
+# pypdf==3.9.1
 ray
 faiss-cpu
+ray
+pymupdf
 
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.3.0+cpu
