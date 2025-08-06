@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 import time
 import threading
-from typing import Optional
+# from typing import Optional
 import gc
 import hashlib
 import re
@@ -14,9 +14,10 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-import pdfplumber
 from langchain.schema import Document
 import fitz
+from pathlib import Path
+
 load_dotenv()
 
 # Keep your perfect chunking parameters
@@ -518,7 +519,7 @@ def warmup_embeddings():
     try:
         llm = ChatGroq(
             api_key=os.getenv("GROQ_API_KEY"),
-            model_name="llama-3.3-70b-versatile",
+            model_name="openai/gpt-oss-120b",
             temperature=0.1,  # Match enhanced settings
             max_tokens=600,   # Match enhanced settings
             request_timeout=15

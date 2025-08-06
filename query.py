@@ -1,5 +1,5 @@
 import os
-import json
+# import json
 import time
 from dotenv import load_dotenv
 import gc
@@ -7,15 +7,15 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
+# from langchain.chains import RetrievalQA
 from langchain.schema import Document
 import re
-from typing import List, Dict, Any
+from typing import List
 import ray
 load_dotenv()
 
 # Configuration - Enhanced for accuracy
-MODEL_NAME = "llama-3.3-70b-versatile"
+MODEL_NAME = "openai/gpt-oss-120b"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 INDEX_PATH = "faiss_index"
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Header, HTTPException, APIRouter
 from pydantic import BaseModel
 from typing import List
-import json
+# import json
 import os
 import asyncio
 import time
@@ -177,6 +177,7 @@ def health_check():
 async def process_document_queries(request: QueryRequest, authorization: str = Header(...)):
     start_time = time.time()
     verify_auth(authorization)
+    vectorstore = None
     try:
         print(f"🚀 Processing {len(request.questions)} questions")
         loop = asyncio.get_event_loop()
@@ -221,7 +222,7 @@ def get_performance_stats():
         },
         "model_info": {
             "embeddings": "all-MiniLM-L6-v2",
-            "llm": "llama-3.1-8b-instant",
+            "llm": "openai/gpt-oss-120b",
             "chunk_size": 800,
             "overlap": 200
         }
