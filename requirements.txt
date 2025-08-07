@@ -8,9 +8,9 @@ python-dotenv==1.1.1
 requests==2.32.4
 sentence-transformers
 # pypdf==3.9.1
-ray
+
 faiss-cpu
-ray
+
 pymupdf
 
 --extra-index-url https://download.pytorch.org/whl/cpu
