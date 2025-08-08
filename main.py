@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from ingest import process_document_from_url, warmup_embeddings
 from query import analyze_query_with_vectorstore_fast, process_queries_batch
+from logging_service import request_logger, generate_request_id, log_api_request
 import gc
 
 load_dotenv()
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
     yield
     print("🛑 Shutting down...")
     executor.shutdown(wait=True)
+    request_logger.close()  # Clean up logging resources
     gc.collect()
 
 app = FastAPI(
@@ -62,7 +64,8 @@ def read_root():
             "Smart document chunking",
             "Cached embeddings",
             "Sequential query processing",
-            "Insurance domain optimization"
+            "Insurance domain optimization",
+            "Request logging to Google Sheets"
         ]
     }
 
@@ -73,34 +76,82 @@ def health_check():
     return {
         "status": "ok",
         "workers": [str(child) for child in children],
+        "logging_enabled": request_logger.sheet is not None
     }
 
 @router.post("/hackrx/run", response_model=QueryResponse)
 async def process_document_queries(request: QueryRequest, authorization: str = Header(...)):
     start_time = time.time()
+    request_id = generate_request_id()
+    
+    print(f"🚀 Processing request {request_id} with {len(request.questions)} questions")
+    
     verify_auth(authorization)
     vectorstore = None
+    doc_time = 0
+    query_time = 0
+    success = True
+    error_message = ""
+    answers = []
+    
     try:
-        print(f"🚀 Processing {len(request.questions)} questions")
         loop = asyncio.get_event_loop()
+        
         print("📄 Processing document...")
         doc_start = time.time()
         vectorstore = await loop.run_in_executor(executor, process_document_from_url, request.documents)
         doc_time = time.time() - doc_start
         print(f"✅ Document processed in {doc_time:.1f}s")
+        
         print("🔍 Processing questions...")
         query_start = time.time()
         answers = await loop.run_in_executor(executor, process_queries_batch, vectorstore, request.questions)
         query_time = time.time() - query_start
         print(f"✅ Questions processed in {query_time:.1f}s")
+        
         total_time = time.time() - start_time
-        print(f"🎉 Request completed in {total_time:.1f}s")
+        print(f"🎉 Request {request_id} completed in {total_time:.1f}s")
         print(f"📊 Breakdown - Doc: {doc_time:.1f}s, Query: {query_time:.1f}s")
+        
+        # Log successful request
+        await log_api_request(
+            request_id=request_id,
+            document_url=request.documents,
+            questions=request.questions,
+            answers=answers,
+            total_time=total_time,
+            doc_time=doc_time,
+            query_time=query_time,
+            success=True
+        )
+        
         return QueryResponse(answers=answers)
+        
     except Exception as e:
+        success = False
+        error_message = str(e)
         error_time = time.time() - start_time
-        print(f"❌ Error after {error_time:.1f}s: {str(e)}")
-        return QueryResponse(answers=[f"Processing error: {str(e)}"] * len(request.questions))
+        
+        print(f"❌ Request {request_id} failed after {error_time:.1f}s: {error_message}")
+        
+        # Create error answers
+        answers = [f"Processing error: {error_message}"] * len(request.questions)
+        
+        # Log failed request
+        await log_api_request(
+            request_id=request_id,
+            document_url=request.documents,
+            questions=request.questions,
+            answers=answers,
+            total_time=error_time,
+            doc_time=doc_time,
+            query_time=query_time,
+            success=False,
+            error_message=error_message
+        )
+        
+        return QueryResponse(answers=answers)
+        
     finally:
         if vectorstore:
             from ingest import cleanup_vectorstore
@@ -116,7 +167,8 @@ def get_performance_stats():
             "MMR-only retrieval",
             "Sequential query processing",
             "Insurance-specific prompts",
-            "Cached LLM connections"
+            "Cached LLM connections",
+            "Request logging to Google Sheets"
         ],
         "expected_performance": {
             "document_processing": "5-10s",
@@ -128,8 +180,29 @@ def get_performance_stats():
             "llm": "openai/gpt-oss-120b",
             "chunk_size": 1500,
             "overlap": 400
+        },
+        "logging": {
+            "enabled": request_logger.sheet is not None,
+            "storage": "Google Sheets"
         }
     }
+
+# New endpoint to get recent logs (optional)
+@router.get("/logs/recent")
+async def get_recent_logs(authorization: str = Header(...)):
+    """Get recent request logs (requires authentication)"""
+    verify_auth(authorization)
+    
+    if not request_logger.sheet:
+        return {"error": "Logging not enabled"}
+    
+    try:
+        # Get the last 10 rows (excluding header)
+        all_records = request_logger.sheet.get_all_records()
+        recent_logs = all_records[-10:] if len(all_records) > 10 else all_records
+        return {"recent_logs": recent_logs, "total_count": len(all_records)}
+    except Exception as e:
+        return {"error": f"Failed to fetch logs: {str(e)}"}
 
 app.include_router(router, prefix="/api/v1")
 

@@ -13,7 +13,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 load_dotenv()
 
-MODEL_NAME = "openai/gpt-oss-120b"
+MODEL_NAME = "llama-3.3-70b-versatile"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 INDEX_PATH = "faiss_index"
 
