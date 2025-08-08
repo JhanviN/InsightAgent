@@ -9,6 +9,5 @@ venv/
 *.tar
 *.tar.gz
 *.egg-info/
-faiss_index/
 data/
 *.json

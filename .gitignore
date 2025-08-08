@@ -13,9 +13,6 @@ env/
 # VS Code settings
 .vscode/
 
-# FAISS index files
-faiss_index/
-
 # macOS
 .DS_Store
 
