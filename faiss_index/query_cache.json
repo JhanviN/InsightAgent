@@ -1,0 +1,86 @@
+{
+  "3f44338c7fc974084275a3927d5d7303": {
+    "query": "When will my root canal claim of Rs 25,000 be settled?",
+    "answer": "The insurer must settle (or reject) your claim within 45 days of receiving the last required document. If an investigation is required, the investigation must be completed within 30 days, but the final settlement still must be made within the same 45‑day period after the last necessary document is received. If the settlement takes longer than 45 days, interest at 2 % above the RBI bank rate will be payable.",
+    "timestamp": 1754824713.573522,
+    "document_sample": "AYUSH \nExpenses incurred for Inpatient Care treatment under Ayurveda, Yoga and Naturopathy, Unani, S"
+  },
+  "f02944b14ed8171b680a35a4642363cc": {
+    "query": "I have done an IVF for Rs 56,000. Is it covered?",
+    "answer": "IVF is listed under **Sterility and Infertacy (Code Excl 17)**, which excludes “Assisted Reproduction services including … IVF”. Therefore the Rs 56,000 IVF expense is not covered under this policy.",
+    "timestamp": 1754824714.089444,
+    "document_sample": "7. Refractive Error (Code   Excl 15) \nExpenses related to the treatment for correction of eye sight "
+  },
+  "9370f18c684f6a4e6689b7a0afef85e1": {
+    "query": "I did a cataract treatment of Rs 100,000. Will you settle the full Rs 100,000?",
+    "answer": "The policy limits cataract coverage to the lower of 25 % of the Sum Insured or ₹40,000 per eye (whichever is lower) for each eye in a policy period. Therefore, the full ₹100,000 will not be paid; the claim is capped at the applicable limit (up to ₹40,000 per eye).",
+    "timestamp": 1754824714.8810453,
+    "document_sample": "time to time \n \n4. AYUSH Treatment \nThe Company shall indemnify Medical Expenses incurred for Inpati"
+  },
+  "a17a601ecdc35a47801a6ccff2b0799e": {
+    "query": "Give me a list of documents to be uploaded for hospitalization for heart surgery.",
+    "answer": "The required documents for a hospitalization claim for heart surgery are:  \n\n- Photo identity proof of the patient (e.g., Aadhaar, passport).  \n- Doctor’s prescription advising admission plus the original item‑wise hospital bills.  \n- Payment receipts and NEFT details with a cancelled cheque for direct credit.  \n- Discharge summary with complete medical history, investigation/diagnostic reports and the attending doctor’s prescription.  \n- OT notes or the surgeon’s certificate detailing the operation (including implant/invoice details if any), Medico‑Legal Report and FIR if applicable.  \n- KYC (identity and address proof) of the proposer when the claim exceeds Rs 1 lakh (per AML guidelines).  \n- Legal heir or succession certificate, if applicable, and any other documents required by the insurer/TPA.",
+    "timestamp": 1754824726.514269,
+    "document_sample": "ii. Photo Identity proof of the patient \niii. Medical practitioner s prescription advising admission"
+  },
+  "e3cc9086419a1b9907abe233a215d767": {
+    "query": "If my car is stolen, what case will it be in law?",
+    "answer": "Information not found in the document.",
+    "timestamp": 1754825483.9853427,
+    "document_sample": "satisfied that a case pending in a court subordinate to it involves a substantial \nquestion of law a"
+  },
+  "fabdaa410038b6cafa409d2cb2f1ac5a": {
+    "query": "If I am arrested without a warrant, is that legal?",
+    "answer": "**Relevant excerpts from the document**\n\n1. **Protection against arrest and detention in certain cases**  \n   - “No person who is arrested shall be detained in custody **without being informed, as soon as may be, of the grounds for such arrest** nor shall he be denied the right to consult, and to be defended by, a legal practitioner of his choice.”  \n\n2. **General protection of personal liberty**  \n   - “No person shall be deprived of his life or personal liberty **except according to procedure established by law**.”  \n\n**Interpretation in relation to the question**  \n- The document states that a person who is arrested must be promptly informed of the grounds for the arrest and must be allowed to consult a lawyer of his choice.  \n- It does **not** specifically mention whether a warrant is required for an arrest. However, the requirement that the arrest be “according to procedure established by law” implies that any arrest (with or without a warrant) must follow the legal procedures prescribed by law.  \n\n**Conclusion**  \n- The document provides **partial information** relevant to the legality of an arrest (the need for procedural compliance and informing the arrested person of the grounds).  \n- It does **not** directly address the legality of an arrest **without a warrant**.  \n\n**Extracted text**  \n> “No person who is arrested shall be detained in custody without being informed, as soon as may be, of the grounds for such arrest nor shall he be denied the right to consult, and to be defended by, a legal practitioner of his choice.”  \n\n> “No person shall be deprived of his life or personal liberty except according to procedure established by law.”",
+    "timestamp": 1754825485.6197379,
+    "document_sample": "penalty greater than that which might have been inflicted under the law in force \nat the time of the"
+  },
+  "76f4230af77d1a662fdf8b4eb33e13e0": {
+    "query": "If someone denies me a job because of my caste, is that allowed?",
+    "answer": "No. Under Article 16 of the Constitution, a citizen cannot be denied employment or appointment on the basis of caste (or religion, race, sex, etc.). Such discrimination is prohibited by law.",
+    "timestamp": 1754825494.2851567,
+    "document_sample": "THE CONSTITUTION OF INDIA\n(Part III. Fundamental Rights)\n8\nExplanation. For the purposes of this art"
+  },
+  "f3c88f70981bca25230a8c5476747a16": {
+    "query": "If the government takes my land for a project, can I stop it?",
+    "answer": "Yes. The Constitution says that the State may not acquire any land (including a portion within the ceiling limit) unless the law provides for compensation **not less than the market value** of the land, and any law that extinguishes or modifies your rights in such a way is deemed void if it violates Articles 14 or 19. Thus, if the government takes your land without the required market‑value compensation, you can challenge the acquisition.",
+    "timestamp": 1754825508.111391,
+    "document_sample": "THE CONSTITUTION OF INDIA\n(Part III. Fundamental Rights)\n17\n(e) the extinguishment or modification o"
+  },
+  "0a252638e6474e2927423b7cb313311f": {
+    "query": "If my child is forced to work in a factory, is that legal?",
+    "answer": "No, it is not legal. The Constitution of India (Article 23) expressly prohibits the employment of any child below fourteen years in any factory, mine or other hazardous work, making such forced child labor illegal.",
+    "timestamp": 1754825522.7424064,
+    "document_sample": "THE CONSTITUTION OF INDIA\n(Part III. Fundamental Rights)\n14\nRight against Exploitation\n23. Prohibiti"
+  },
+  "1d205e14794234b79ea1adbaa5dd3889": {
+    "query": "If I am stopped from speaking at a protest, is that against my rights?",
+    "answer": "Information not found in the document.",
+    "timestamp": 1754825553.7883084,
+    "document_sample": "Constitution and to the rules and standing orders regulating the procedure of \nParliament, there sha"
+  },
+  "52e25199b33b3fca77b4e41bd42254a9": {
+    "query": "If a religious place stops me from entering because I'm a woman, is that constitutional?",
+    "answer": "No. Under Article 14 of the Constitution, the State may not discriminate on the basis of sex (or religion, race, caste, place of birth, etc.). Therefore a religious place that bars a woman from entering would violate the constitutional guarantee of equality before the law and the prohibition of sex‑based discrimination.",
+    "timestamp": 1754825572.9847436,
+    "document_sample": "or other competent authority in the territory of India before the \ncommencement of this Constitution"
+  },
+  "de8a01b7a75586372ef37ed0b1448290": {
+    "query": "If I change my religion, can the government stop me?",
+    "answer": "The Constitution guarantees freedom of conscience and the free profession, practice and propagation of religion (Article 25) and the right to manage religious affairs, subject only to public order, morality and health. Therefore, the government cannot prevent you from changing your religion.",
+    "timestamp": 1754825582.7400484,
+    "document_sample": "prevent the State from making any law \n(a) regulating or restricting any economic, financial, politi"
+  },
+  "80876f6d7e02aaffe4c1660493dc2cce": {
+    "query": "If the police torture someone in custody, what right is being violated?",
+    "answer": "The police torture a person in custody violates the constitutional **right to life and personal liberty** (the protection against deprivation of life or personal liberty except according to law). This right is guaranteed under Part III of the Constitution of India.",
+    "timestamp": 1754825598.565106,
+    "document_sample": "penalty greater than that which might have been inflicted under the law in force \nat the time of the"
+  },
+  "8cf0c77839174b72edc6eb5e79258ed7": {
+    "query": "If I'm denied admission to a public university because I'm from a backward community, can I do something?",
+    "answer": "Yes. The Constitution expressly allows the State to make special provisions for the admission of socially and educationally backward classes (including Scheduled Castes and Scheduled Tribes) to educational institutions, including public universities. If you are denied admission on that basis, you can invoke these constitutional provisions and seek legal redress to enforce the mandated reservation or special‑admission rights.",
+    "timestamp": 1754825612.891833,
+    "document_sample": "THE CONSTITUTION OF INDIA\n(Part III. Fundamental Rights)\n7\n(a) access to shops, public restaurants, "
+  }
+}

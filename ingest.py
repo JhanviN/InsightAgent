@@ -8,6 +8,7 @@ import threading
 import gc
 import hashlib
 import re
+import json
 from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -15,7 +16,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 import fitz
-from pathlib import Path
 
 load_dotenv()
 
@@ -25,9 +25,16 @@ CHUNK_OVERLAP = 400        # Your perfect setting
 EMBED_MODEL = "all-MiniLM-L6-v2"
 MAX_CHUNKS = 1000          # Increased slightly for better coverage
 
+# Global FAISS index path - persistent across restarts
+PERSISTENT_FAISS_PATH = "./faiss_index"
+DOCUMENT_METADATA_PATH = os.path.join(PERSISTENT_FAISS_PATH, "document_metadata.json")
+
 # Global cache with thread safety
 _embeddings_cache = None
 _embeddings_lock = threading.Lock()
+_persistent_vectorstore = None
+_vectorstore_lock = threading.Lock()
+_processed_documents = {}  # Track processed documents
 
 def get_embeddings():
     """Thread-safe cached embeddings with enhanced configuration"""
@@ -44,20 +51,135 @@ def get_embeddings():
                 )
     return _embeddings_cache
 
-def cleanup_vectorstore(vectorstore):
-    """Clean up vector store from memory"""
+def get_document_hash(url: str) -> str:
+    """Generate a consistent hash for a document URL"""
+    return hashlib.md5(url.encode()).hexdigest()
+
+def load_document_metadata():
+    """Load metadata about processed documents"""
+    global _processed_documents
     try:
-        if vectorstore is not None:
-            # Clear FAISS index
+        if os.path.exists(DOCUMENT_METADATA_PATH):
+            with open(DOCUMENT_METADATA_PATH, 'r') as f:
+                _processed_documents = json.load(f)
+            print(f"📋 Loaded metadata for {len(_processed_documents)} processed documents")
+        else:
+            _processed_documents = {}
+    except Exception as e:
+        print(f"⚠️ Failed to load document metadata: {e}")
+        _processed_documents = {}
+
+def save_document_metadata():
+    """Save metadata about processed documents"""
+    try:
+        os.makedirs(PERSISTENT_FAISS_PATH, exist_ok=True)
+        with open(DOCUMENT_METADATA_PATH, 'w') as f:
+            json.dump(_processed_documents, f, indent=2)
+        print(f"💾 Saved metadata for {len(_processed_documents)} processed documents")
+    except Exception as e:
+        print(f"⚠️ Failed to save document metadata: {e}")
+
+def load_persistent_vectorstore():
+    """Load persistent FAISS vectorstore if it exists"""
+    global _persistent_vectorstore
+    
+    if _persistent_vectorstore is not None:
+        return _persistent_vectorstore
+        
+    with _vectorstore_lock:
+        if _persistent_vectorstore is not None:
+            return _persistent_vectorstore
+            
+        try:
+            if os.path.exists(PERSISTENT_FAISS_PATH) and os.path.isdir(PERSISTENT_FAISS_PATH):
+                # Check if FAISS index files exist
+                faiss_files = [f for f in os.listdir(PERSISTENT_FAISS_PATH) if f.endswith(('.faiss', '.pkl'))]
+                if faiss_files:
+                    print("🔄 Loading existing persistent FAISS index...")
+                    embeddings = get_embeddings()
+                    _persistent_vectorstore = FAISS.load_local(
+                        PERSISTENT_FAISS_PATH,
+                        embeddings,
+                        allow_dangerous_deserialization=True
+                    )
+                    print(f"✅ Loaded persistent vectorstore with {_persistent_vectorstore.index.ntotal} vectors")
+                    load_document_metadata()
+                    return _persistent_vectorstore
+        except Exception as e:
+            print(f"⚠️ Failed to load existing vectorstore: {e}")
+            print("🔨 Will create new vectorstore")
+        
+        # Create empty vectorstore if none exists
+        print("🆕 Creating new persistent vectorstore...")
+        embeddings = get_embeddings()
+        # Create a dummy document to initialize the vectorstore
+        dummy_doc = Document(page_content="Initialization document", metadata={"init": True})
+        _persistent_vectorstore = FAISS.from_documents([dummy_doc], embeddings)
+        
+        # Save immediately (keep the dummy document for now)
+        os.makedirs(PERSISTENT_FAISS_PATH, exist_ok=True)
+        _persistent_vectorstore.save_local(PERSISTENT_FAISS_PATH)
+        
+        load_document_metadata()
+        print("✅ Created new persistent vectorstore")
+        
+    return _persistent_vectorstore
+
+def add_document_to_persistent_store(chunks: list, document_url: str):
+    """Add new document chunks to the persistent vectorstore"""
+    global _persistent_vectorstore
+    
+    doc_hash = get_document_hash(document_url)
+    
+    # Check if document already processed
+    if doc_hash in _processed_documents:
+        print(f"📄 Document already in persistent store: {document_url}")
+        return _persistent_vectorstore
+    
+    with _vectorstore_lock:
+        vectorstore = load_persistent_vectorstore()
+        
+        print(f"➕ Adding {len(chunks)} chunks to persistent vectorstore...")
+        start_time = time.time()
+        
+        # Add chunks to existing vectorstore
+        if vectorstore.index.ntotal > 0:
+            vectorstore.add_documents(chunks)
+        else:
+            # If empty, recreate
+            embeddings = get_embeddings()
+            vectorstore = FAISS.from_documents(chunks, embeddings)
+            _persistent_vectorstore = vectorstore
+        
+        # Save updated vectorstore
+        vectorstore.save_local(PERSISTENT_FAISS_PATH)
+        
+        # Update metadata
+        _processed_documents[doc_hash] = {
+            "url": document_url,
+            "processed_at": time.time(),
+            "chunk_count": len(chunks),
+            "total_vectors": vectorstore.index.ntotal
+        }
+        save_document_metadata()
+        
+        print(f"✅ Added document to persistent store in {time.time() - start_time:.1f}s")
+        print(f"📊 Total vectors in store: {vectorstore.index.ntotal}")
+        
+        return vectorstore
+
+def cleanup_vectorstore(vectorstore):
+    """Clean up vector store from memory (but keep persistent store intact)"""
+    try:
+        if vectorstore is not None and vectorstore != _persistent_vectorstore:
+            # Only cleanup if it's not the persistent store
             if hasattr(vectorstore, 'index'):
                 del vectorstore.index
             
-            # Clear document store
             if hasattr(vectorstore, 'docstore'):
                 vectorstore.docstore.clear() if hasattr(vectorstore.docstore, 'clear') else None
                 del vectorstore.docstore
             
-            # Clear index to docstore mapping
             if hasattr(vectorstore, 'index_to_docstore_id'):
                 vectorstore.index_to_docstore_id.clear()
                 del vectorstore.index_to_docstore_id
@@ -66,7 +188,7 @@ def cleanup_vectorstore(vectorstore):
             
         # Force garbage collection
         gc.collect()
-        print("🧹 Vector store cleaned from memory")
+        print("🧹 Vector store cleaned from memory (persistent store intact)")
         
     except Exception as e:
         print(f"⚠️ Cleanup warning: {str(e)}")
@@ -290,45 +412,43 @@ def process_document_from_url(document_url: str, cleanup_after_use: bool = True)
     temp_file = None
     chunks = None
     documents = None
-    cache_base = Path(os.getenv("CACHE_DIR", "./faiss_index"))
-    url_hash = hashlib.md5(document_url.encode()).hexdigest()
-    cache_path = cache_base / url_hash
-    embeddings = get_embeddings()
+    
+    doc_hash = get_document_hash(document_url)
+    
     try:
-        cache_base.mkdir(parents=True, exist_ok=True)
-        if cache_path.exists():
-            try:
-                print("✅ Loading cached vectorstore...")
-                cache_start = time.time()
-                vectorstore = FAISS.load_local(str(cache_path), embeddings, allow_dangerous_deserialization=True)
-                print(f"✅ Loaded cached vectorstore in {time.time() - cache_start:.1f}s")
-                return vectorstore
-            except Exception as e:
-                print(f"⚠️ Cache load failed: {str(e)}, regenerating...")
+        # Check if document is already in persistent store
+        load_document_metadata()  # Refresh metadata
+        if doc_hash in _processed_documents:
+            print(f"🎯 Document already processed: {document_url}")
+            print(f"📊 Using existing vectorstore with {_processed_documents[doc_hash]['chunk_count']} chunks")
+            vectorstore = load_persistent_vectorstore()
+            total_time = time.time() - total_start
+            print(f"⚡ INSTANT ACCESS: {total_time:.1f}s")
+            return vectorstore
+            
+        print(f"🆕 Processing new document: {document_url}")
+        
         temp_file = download_document(document_url)
         print(f"📂 Temp file: {temp_file}, Size: {os.path.getsize(temp_file) / (1024 * 1024):.1f}MB")
+        
         documents = load_document(temp_file)
         print(f"📜 Loaded {len(documents)} documents")
-        for i, doc in enumerate(documents[:3]):
-            print(f"Doc {i+1}: {doc.page_content[:100]}... Metadata: {doc.metadata}")
+        
         chunks = smart_chunk_documents(documents)
         print(f"✂️ Created {len(chunks)} chunks")
-        for i, chunk in enumerate(chunks[:3]):
-            print(f"Chunk {i+1}: {chunk.page_content[:100]}... Metadata: {chunk.metadata}")
+        
         if not chunks:
             raise Exception("No chunks created, check document loading or chunking")
-        vectorstore = create_vectorstore(chunks)
-        print(f"🧠 Vector store created with {vectorstore.index.ntotal} vectors")
-        try:
-            cache_path.mkdir(parents=True, exist_ok=True)
-            vectorstore.save_local(str(cache_path))
-            print(f"✅ Saved vectorstore to cache: {cache_path}")
-        except Exception as e:
-            print(f"⚠️ Cache save failed: {e}")
+        
+        # Add to persistent vectorstore
+        vectorstore = add_document_to_persistent_store(chunks, document_url)
+        
         total_time = time.time() - total_start
         print(f"🎉 TOTAL PROCESSING TIME: {total_time:.1f}s")
         print(f"📊 Rate: {len(chunks)/total_time:.1f} chunks/sec")
+        
         return vectorstore
+        
     except Exception as e:
         print(f"❌ Enhanced pipeline error: {str(e)}")
         raise
@@ -362,8 +482,7 @@ def process_and_query_with_cleanup(document_url: str, query_function, *query_arg
         print(f"✅ Enhanced queries completed in {query_time:.1f}s")
         return results
     finally:
-        if vectorstore:
-            cleanup_vectorstore(vectorstore)
+        # Don't cleanup the persistent vectorstore
         gc.collect()
         print("✅ Enhanced cleanup finished")
 
@@ -379,6 +498,10 @@ def warmup_embeddings():
         "Copayment and coinsurance responsibilities"
     ]
     embeddings.embed_documents(insurance_samples)
+    
+    # Initialize persistent vectorstore during warmup
+    load_persistent_vectorstore()
+    
     try:
         llm = ChatGroq(
             api_key=os.getenv("GROQ_API_KEY"),

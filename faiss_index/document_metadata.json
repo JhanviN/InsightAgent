@@ -1,0 +1,14 @@
+{
+  "d6cf54e2e41ddc58c1eadbcdb3ea24ef": {
+    "url": "https://hackrx.blob.core.windows.net/assets/Arogya%20Sanjeevani%20Policy%20-%20CIN%20-%20U10200WB1906GOI001713%201.pdf?sv=2023-01-03&st=2025-07-21T08%3A29%3A02Z&se=2025-09-22T08%3A29%3A00Z&sr=b&sp=r&sig=nzrz1K9Iurt%2BBXom%2FB%2BMPTFMFP3PRnIvEsipAX10Ig4%3D",
+    "processed_at": 1754825400.3397827,
+    "chunk_count": 70,
+    "total_vectors": 71
+  },
+  "f15345ba5ce7155ebb1fc8f231da2654": {
+    "url": "https://hackrx.blob.core.windows.net/assets/indian_constitution.pdf?sv=2023-01-03&st=2025-07-28T06%3A42%3A00Z&se=2026-11-29T06%3A42%3A00Z&sr=b&sp=r&sig=5Gs%2FOXqP3zY00lgciu4BZjDV5QjTDIx7fgnfdz6Pu24%3D",
+    "processed_at": 1754825482.0484068,
+    "chunk_count": 781,
+    "total_vectors": 852
+  }
+}

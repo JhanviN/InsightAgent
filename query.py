@@ -2,6 +2,8 @@ import os
 import time
 from dotenv import load_dotenv
 import gc
+import json
+import hashlib
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
@@ -17,10 +19,96 @@ MODEL_NAME = "openai/gpt-oss-120b"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 INDEX_PATH = "faiss_index"
 
+# Persistent query cache - store in same directory as FAISS index
+PERSISTENT_DIR = "./faiss_index"
+QUERY_CACHE_PATH = os.path.join(PERSISTENT_DIR, "query_cache.json")
+_persistent_query_cache = {}
+
 # Global caches
 _llm_cache = None
-_query_cache = {}
 _cache_embeddings = None
+
+def load_query_cache():
+    """Load persistent query cache from disk"""
+    global _persistent_query_cache
+    try:
+        if os.path.exists(QUERY_CACHE_PATH):
+            with open(QUERY_CACHE_PATH, 'r', encoding='utf-8') as f:
+                _persistent_query_cache = json.load(f)
+            print(f"📋 Loaded {len(_persistent_query_cache)} cached queries from disk")
+        else:
+            _persistent_query_cache = {}
+    except Exception as e:
+        print(f"⚠️ Failed to load query cache: {e}")
+        _persistent_query_cache = {}
+
+def save_query_cache():
+    """Save persistent query cache to disk"""
+    global _persistent_query_cache  # Add this global declaration
+    try:
+        # Ensure directory exists
+        os.makedirs(PERSISTENT_DIR, exist_ok=True)
+        
+        # Limit cache size to prevent it from growing too large
+        if len(_persistent_query_cache) > 1000:
+            # Keep only the 1000 most recent entries
+            sorted_items = sorted(_persistent_query_cache.items(), 
+                                key=lambda x: x[1].get('timestamp', 0), 
+                                reverse=True)
+            _persistent_query_cache = dict(sorted_items[:1000])
+        
+        with open(QUERY_CACHE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(_persistent_query_cache, f, indent=2, ensure_ascii=False)
+        print(f"💾 Saved {len(_persistent_query_cache)} queries to cache")
+    except Exception as e:
+        print(f"⚠️ Failed to save query cache: {e}")
+
+def get_query_hash(query: str, document_context: str = "") -> str:
+    """Generate a consistent hash for a query + document context combination"""
+    # Normalize the query
+    normalized_query = query.lower().strip()
+    # Include a small part of document context for differentiation
+    context_sample = document_context[:200] if document_context else ""
+    combined = f"{normalized_query}|{context_sample}"
+    return hashlib.md5(combined.encode('utf-8')).hexdigest()
+
+def get_cached_answer(query: str, document_context: str = "") -> str:
+    """Get cached answer for a query if it exists"""
+    global _persistent_query_cache  # Add this global declaration
+    query_hash = get_query_hash(query, document_context)
+    
+    if query_hash in _persistent_query_cache:
+        cache_entry = _persistent_query_cache[query_hash]
+        cached_time = cache_entry.get('timestamp', 0)
+        current_time = time.time()
+        
+        # Cache expires after 24 hours (86400 seconds) - adjust as needed
+        if current_time - cached_time < 86400:
+            print(f"🎯 Cache HIT for query: {query[:50]}...")
+            return cache_entry['answer']
+        else:
+            # Remove expired cache entry
+            del _persistent_query_cache[query_hash]
+            print(f"⏰ Cache expired for query: {query[:50]}...")
+    
+    print(f"❌ Cache MISS for query: {query[:50]}...")
+    return None
+
+def cache_answer(query: str, answer: str, document_context: str = ""):
+    """Cache an answer for future use"""
+    global _persistent_query_cache  # Add this global declaration
+    query_hash = get_query_hash(query, document_context)
+    
+    _persistent_query_cache[query_hash] = {
+        'query': query,
+        'answer': answer,
+        'timestamp': time.time(),
+        'document_sample': document_context[:100] if document_context else ""
+    }
+    
+    # Save to disk periodically (every 10 new entries)
+    if len(_persistent_query_cache) % 10 == 0:
+        save_query_cache()
 
 def get_llm():
     global _llm_cache
@@ -145,27 +233,32 @@ def invoke_llm_with_retry(llm, prompt):
 
 def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_after=True) -> str:
     try:
-        query_emb = get_query_embeddings().embed_query(query_text)
-        for cached_query, (cached_emb, cached_answer) in _query_cache.items():
-            similarity = sum(a * b for a, b in zip(query_emb, cached_emb))
-            if similarity > 0.95:
-                print(f"✅ Cache hit for query: {query_text}")
-                return cached_answer
+        # First check cache
+        docs = enhanced_retrieval_with_multiple_strategies(vectorstore, query_text, max_docs=6)
+        context = "\n\n".join([doc.page_content for doc in docs]) if docs else ""
+        
+        cached_answer = get_cached_answer(query_text, context[:500])
+        if cached_answer:
+            return cached_answer
+        
         llm = get_llm()
         processed_query = preprocess_query(query_text)
-        docs = enhanced_retrieval_with_multiple_strategies(vectorstore, query_text, max_docs=6)
+        
         if not docs:
             print("⚠️ No documents retrieved")
             answer = "No relevant information found in the document."
-            _query_cache[query_text] = (query_emb, answer)
+            cache_answer(query_text, answer, context)
             return answer
+        
         print(f"📄 Retrieved {len(docs)} documents for analysis")
-        context = "\n\n".join([doc.page_content for doc in docs])
+        
         first_prompt = ENHANCED_INSURANCE_PROMPT.format(context=context, question=query_text)
         response = invoke_llm_with_retry(llm, first_prompt)
         answer = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+        
         if answer.startswith("ANSWER:"):
             answer = answer[7:].strip()
+        
         if (not answer or len(answer) < 20 or "not found" in answer.lower() or 
             "not mentioned" in answer.lower() or "does not contain" in answer.lower()):
             print("🔄 First attempt unsuccessful, trying aggressive search...")
@@ -176,11 +269,16 @@ def analyze_query_with_vectorstore_fast(query_text: str, vectorstore, cleanup_af
                 answer2 = answer2[9:].strip()
             if answer2 and len(answer2) > len(answer) and "not found" not in answer2.lower():
                 answer = answer2
-        _query_cache[query_text] = (query_emb, answer)
+        
+        # Cache the answer
+        cache_answer(query_text, answer, context[:500])
+        
         return answer
     except Exception as e:
         print(f"❌ Enhanced query processing error: {str(e)}")
-        return f"Error processing query: {str(e)}"
+        error_answer = f"Error processing query: {str(e)}"
+        cache_answer(query_text, error_answer)
+        return error_answer
     finally:
         if cleanup_after:
             gc.collect()
@@ -228,7 +326,7 @@ def score_answer_quality(answer: str, question: str) -> int:
         return 5
     if len(answer.split()) > 20:
         score += 20
-    if any(char in answer for char in ['$', '%']) or re.search(r'\d+', answer):
+    if any(char in answer for char in ['%']) or re.search(r'\d+', answer):
         score += 25
     insurance_terms = [
         'policy', 'coverage', 'deductible', 'premium', 'benefit',
@@ -334,10 +432,23 @@ def process_single_query_example(vectorstore, question: str):
 def process_queries_batch(vectorstore, questions: List[str], batch_size: int = 5) -> List[str]:
     start = time.time()
     print(f"🔍 Processing {len(questions)} questions sequentially...")
+    
+    cache_hits = 0
     answers = []
+    
     for i, question in enumerate(questions):
         print(f"  Processing question {i+1}/{len(questions)}")
         answer = analyze_query_with_vectorstore_fast(question, vectorstore, cleanup_after=False)
         answers.append(answer)
-    print(f"✅ Sequential processing completed in {time.time() - start:.1f}s")
+    
+    # Save cache after batch processing
+    save_query_cache()
+    
+    total_time = time.time() - start
+    print(f"✅ Sequential processing completed in {total_time:.1f}s")
+    print(f"📊 Processed {len(answers)} questions")
+    
     return answers
+
+# Initialize query cache on module load
+load_query_cache()

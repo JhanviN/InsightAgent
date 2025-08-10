@@ -2,7 +2,6 @@
 FROM python:3.10-slim-buster AS builder
 
 WORKDIR /app
-RUN mkdir -p /app/faiss_index
 
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --prefix=/install --no-cache-dir -r requirements.txt
@@ -15,8 +14,14 @@ WORKDIR /app
 # Copy installed packages
 COPY --from=builder /install /usr/local
 
+# Create persistent directories for FAISS index and query cache
+RUN mkdir -p /app/faiss_index
+
 # Copy application code (including .env file)
 COPY . .
+
+# Create volume mount points for persistent storage
+VOLUME ["/app/faiss_index"]
 
 # Set default port
 ENV PORT=8000
