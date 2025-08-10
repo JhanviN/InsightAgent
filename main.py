@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from ingest import process_document_from_url, warmup_embeddings, load_persistent_vectorstore
 from query import  process_queries_batch, load_query_cache, save_query_cache
-from logging_service import request_logger, generate_request_id, log_api_request
+# from logging_service import request_logger, generate_request_id, log_api_request
 import gc
 
 load_dotenv()
@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
     await loop.run_in_executor(executor, save_query_cache)
     
     executor.shutdown(wait=True)
-    request_logger.close()  # Clean up logging resources
+    # request_logger.close()  # Clean up logging resources
     gc.collect()
     print("✅ Shutdown complete")
 
@@ -95,7 +95,7 @@ def health_check():
     return {
         "status": "ok",
         "workers": [str(child) for child in children],
-        "logging_enabled": request_logger.sheet is not None,
+        # "logging_enabled": request_logger.sheet is not None,
         "persistent_storage": {
             "faiss_index_exists": os.path.exists("./faiss_index"),
             "query_cache_size": len(_persistent_query_cache),
@@ -106,7 +106,7 @@ def health_check():
 @router.post("/hackrx/run", response_model=QueryResponse)
 async def process_document_queries(request: QueryRequest, authorization: str = Header(...)):
     start_time = time.time()
-    request_id = generate_request_id()
+    # request_id = generate_request_id()
     
     print(f"🚀 Processing request {request_id} with {len(request.questions)} questions")
     
@@ -139,16 +139,16 @@ async def process_document_queries(request: QueryRequest, authorization: str = H
         print(f"📊 Breakdown - Doc: {doc_time:.1f}s, Query: {query_time:.1f}s")
         
         # Log successful request
-        await log_api_request(
-            request_id=request_id,
-            document_url=request.documents,
-            questions=request.questions,
-            answers=answers,
-            total_time=total_time,
-            doc_time=doc_time,
-            query_time=query_time,
-            success=True
-        )
+        # await log_api_request(
+        #     request_id=request_id,
+        #     document_url=request.documents,
+        #     questions=request.questions,
+        #     answers=answers,
+        #     total_time=total_time,
+        #     doc_time=doc_time,
+        #     query_time=query_time,
+        #     success=True
+        # )
         
         return QueryResponse(answers=answers)
         
@@ -163,17 +163,17 @@ async def process_document_queries(request: QueryRequest, authorization: str = H
         answers = [f"Processing error: {error_message}"] * len(request.questions)
         
         # Log failed request
-        await log_api_request(
-            request_id=request_id,
-            document_url=request.documents,
-            questions=request.questions,
-            answers=answers,
-            total_time=error_time,
-            doc_time=doc_time,
-            query_time=query_time,
-            success=False,
-            error_message=error_message
-        )
+        # await log_api_request(
+        #     request_id=request_id,
+        #     document_url=request.documents,
+        #     questions=request.questions,
+        #     answers=answers,
+        #     total_time=error_time,
+        #     doc_time=doc_time,
+        #     query_time=query_time,
+        #     success=False,
+        #     error_message=error_message
+        # )
         
         return QueryResponse(answers=answers)
         
@@ -215,10 +215,10 @@ def get_performance_stats():
             "cached_queries": len(_persistent_query_cache),
             "processed_documents": len(_processed_documents)
         },
-        "logging": {
-            "enabled": request_logger.sheet is not None,
-            "storage": "Google Sheets"
-        }
+        # "logging": {
+        #     "enabled": request_logger.sheet is not None,
+        #     "storage": "Google Sheets"
+        # }
     }
 
 @router.get("/cache/stats")
@@ -284,21 +284,21 @@ async def clear_caches(authorization: str = Header(...)):
         return {"success": False, "error": str(e)}
 
 # New endpoint to get recent logs (optional)
-@router.get("/logs/recent")
-async def get_recent_logs(authorization: str = Header(...)):
-    """Get recent request logs (requires authentication)"""
-    verify_auth(authorization)
+# @router.get("/logs/recent")
+# async def get_recent_logs(authorization: str = Header(...)):
+#     """Get recent request logs (requires authentication)"""
+#     verify_auth(authorization)
     
-    if not request_logger.sheet:
-        return {"error": "Logging not enabled"}
+#     if not request_logger.sheet:
+#         return {"error": "Logging not enabled"}
     
-    try:
-        # Get the last 10 rows (excluding header)
-        all_records = request_logger.sheet.get_all_records()
-        recent_logs = all_records[-10:] if len(all_records) > 10 else all_records
-        return {"recent_logs": recent_logs, "total_count": len(all_records)}
-    except Exception as e:
-        return {"error": f"Failed to fetch logs: {str(e)}"}
+#     try:
+#         # Get the last 10 rows (excluding header)
+#         all_records = request_logger.sheet.get_all_records()
+#         recent_logs = all_records[-10:] if len(all_records) > 10 else all_records
+#         return {"recent_logs": recent_logs, "total_count": len(all_records)}
+#     except Exception as e:
+#         return {"error": f"Failed to fetch logs: {str(e)}"}
 
 app.include_router(router, prefix="/api/v1")
 
