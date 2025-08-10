@@ -10,5 +10,35 @@
     "processed_at": 1754825482.0484068,
     "chunk_count": 781,
     "total_vectors": 852
+  },
+  "d612f2d6acc201b65f1a01a533fb0281": {
+    "url": "https://hackrx.blob.core.windows.net/assets/Happy%20Family%20Floater%20-%202024%20OICHLIP25046V062425%201.pdf?sv=2023-01-03&spr=https&st=2025-07-31T17%3A24%3A30Z&se=2026-08-01T17%3A24%3A00Z&sr=b&sp=r&sig=VNMTTQUjdXGYb2F4Di4P0zNvmM2rTBoEHr%2BnkUXIqpQ%3D",
+    "processed_at": 1754826262.8868139,
+    "chunk_count": 147,
+    "total_vectors": 1293
+  },
+  "f6a2f111d5498965c3c2ba7e0f022e98": {
+    "url": "https://hackrx.blob.core.windows.net/assets/UNI%20GROUP%20HEALTH%20INSURANCE%20POLICY%20-%20UIIHLGP26043V022526%201.pdf?sv=2023-01-03&spr=https&st=2025-07-31T17%3A06%3A03Z&se=2026-08-01T17%3A06%3A00Z&sr=b&sp=r&sig=wLlooaThgRx91i2z4WaeggT0qnuUUEzIUKj42GsvMfg%3D",
+    "processed_at": 1754826379.4382896,
+    "chunk_count": 148,
+    "total_vectors": 1441
+  },
+  "02297f35889d63ee13da6e119bc6846e": {
+    "url": "https://hackrx.blob.core.windows.net/assets/principia_newton.pdf?sv=2023-01-03&st=2025-07-28T07%3A20%3A32Z&se=2026-07-29T07%3A20%3A00Z&sr=b&sp=r&sig=V5I1QYyigoxeUMbnUKsdEaST99F5%2FDfo7wpKg9XXF5w%3D",
+    "processed_at": 1754827904.8846388,
+    "chunk_count": 1402,
+    "total_vectors": 2843
+  },
+  "515f4f14a724226a7fb15e44f7d8f32c": {
+    "url": "https://hackrx.blob.core.windows.net/assets/Family%20Medicare%20Policy%20(UIN-%20UIIHLIP22070V042122)%201.pdf?sv=2023-01-03&st=2025-07-22T10%3A17%3A39Z&se=2025-08-23T10%3A17%3A00Z&sr=b&sp=r&sig=dA7BEMIZg3WcePcckBOb4QjfxK%2B4rIfxBs2%2F%2BNwoPjQ%3D",
+    "processed_at": 1754828267.9923837,
+    "chunk_count": 98,
+    "total_vectors": 2941
+  },
+  "e1ee2ec419c516f285628ad77f8e1137": {
+    "url": "https://hackrx.blob.core.windows.net/assets/Super_Splendor_(Feb_2023).pdf?sv=2023-01-03&st=2025-07-21T08%3A10%3A00Z&se=2025-09-22T08%3A10%3A00Z&sr=b&sp=r&sig=vhHrl63YtrEOCsAy%2BpVKr20b3ZUo5HMz1lF9%2BJh6LQ0%3D",
+    "processed_at": 1754828531.588833,
+    "chunk_count": 117,
+    "total_vectors": 3058
   }
 }

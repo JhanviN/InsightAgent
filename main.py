@@ -108,7 +108,7 @@ async def process_document_queries(request: QueryRequest, authorization: str = H
     start_time = time.time()
     # request_id = generate_request_id()
     
-    print(f"🚀 Processing request {request_id} with {len(request.questions)} questions")
+    
     
     verify_auth(authorization)
     vectorstore = None
@@ -135,7 +135,7 @@ async def process_document_queries(request: QueryRequest, authorization: str = H
         print(f"✅ Questions processed in {query_time:.1f}s")
         
         total_time = time.time() - start_time
-        print(f"🎉 Request {request_id} completed in {total_time:.1f}s")
+        
         print(f"📊 Breakdown - Doc: {doc_time:.1f}s, Query: {query_time:.1f}s")
         
         # Log successful request

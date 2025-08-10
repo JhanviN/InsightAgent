@@ -1,38 +1,48 @@
-# Stage 1: builder
-FROM python:3.10-slim-buster AS builder
+# Stage 1: Builder
+FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
-# Copy requirements first for caching
+# Install minimal build dependencies and clean up
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    && apt-get purge -y --auto-remove build-essential gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and install dependencies with minimal footprint
 COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --prefix=/install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt -t /install \
+    && find /install -type f -name "*.pyc" -delete
 
-# Copy entire application code including FAISS index from repo
-COPY . .
+# Copy only necessary application files
+COPY main.py ingest.py query.py ./
+COPY faiss_index /app/faiss_index
 
-# Stage 2: runner
-FROM python:3.10-slim-buster
+# Stage 2: Runner
+FROM python:3.10-slim
 
 WORKDIR /app
 
-# Copy installed packages from builder stage
-COPY --from=builder /install /usr/local
+# Copy installed Python packages and ensure executables are in PATH
+COPY --from=builder /install /usr/local/lib/python3.10/site-packages
+RUN ln -s /usr/local/lib/python3.10/site-packages/bin/uvicorn /usr/local/bin/uvicorn || true
 
-# Copy application code including FAISS index
+# Copy application source code and prebuilt FAISS index
 COPY --from=builder /app /app
 
 # Ensure FAISS index directory exists
 RUN mkdir -p /app/faiss_index
 
-# Declare volume for FAISS index persistence
+# Declare persistent volume for FAISS index
 VOLUME ["/app/faiss_index"]
 
-# Set default port
+# Set environment variables
 ENV PORT=8000
 
-# Expose port
+# Expose the port
 EXPOSE $PORT
 
-# Start the application
-CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT}"
+# Run the app
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
