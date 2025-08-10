@@ -162,7 +162,7 @@ def preprocess_query(query: str) -> str:
 
 ENHANCED_INSURANCE_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
-    template="""You are an expert insurance policy analyst. Your job is to find ANY relevant information in the context to answer the question.
+    template="""You are an expert document analyst. Your job is to find ANY relevant information in the context to answer the question.
 
 CONTEXT FROM DOCUMENT:
 {context}

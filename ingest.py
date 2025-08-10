@@ -23,7 +23,7 @@ load_dotenv()
 CHUNK_SIZE = 1500           # Your perfect setting
 CHUNK_OVERLAP = 400        # Your perfect setting
 EMBED_MODEL = "all-MiniLM-L6-v2"
-MAX_CHUNKS = 1000          # Increased slightly for better coverage
+MAX_CHUNKS = 2500          # Increased slightly for better coverage
 
 # Global FAISS index path - persistent across restarts
 PERSISTENT_FAISS_PATH = "./faiss_index"
