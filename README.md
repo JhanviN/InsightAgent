@@ -59,7 +59,7 @@ InsightAgent follows a streamlined RAG pipeline to transform raw documents into 
 
 #### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/InsightAgent.git
+git clone https://github.com/JhanviN/InsightAgent.git
 cd InsightAgent
 
 ```
