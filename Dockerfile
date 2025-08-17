@@ -36,7 +36,7 @@ COPY --from=builder /app /app
 RUN mkdir -p /app/faiss_index
 
 # Declare persistent volume for FAISS index
-VOLUME ["/app/faiss_index"]
+# VOLUME ["/app/faiss_index"]
 
 # Set environment variables
 ENV PORT=8000
