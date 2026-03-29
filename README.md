@@ -4,7 +4,7 @@
 
 Built with **LangChain** for orchestration, **FAISS** for vector stores, and **Sentence-Transformers** for embeddings, InsightAgent delivers context-aware query responses by combining semantic search, text chunking, and LLM integration.  
 
-Optimized for scalability, the project features a **prebuilt persistent FAISS index**, enabling fast vector retrieval and reducing latency for real-world applications. Deployed on **Railway**, InsightAgent exemplifies modern AI engineering, with a **Docker image under 1 GB** for seamless deployment.
+Optimized for scalability, the project features a **prebuilt persistent FAISS index**, enabling fast vector retrieval and reducing latency for real-world applications. Deployed on **Railway**, InsightAgent exemplifies modern AI engineering, with a **Docker image under 1 GB** for seamless deployment.  
 API link https://insightagent-production-ff84.up.railway.app/api/v1/hackrx/run
 ---
 
