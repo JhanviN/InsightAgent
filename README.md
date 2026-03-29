@@ -9,14 +9,14 @@ API link https://insightagent-production-ff84.up.railway.app/api/v1/hackrx/run
 ---
 
 ## ✨ Project Highlights
-- ⚡ **RAG Architecture**: Retrieval-Augmented Generation for accurate, context-enhanced responses using FAISS vector stores and MMR retrieval.  
-- 🔍 **Efficient Vector Search**: FAISS (CPU-optimized) for lightning-fast similarity searches on prebuilt indices.  
-- 📄 **Advanced Text Processing**: `RecursiveCharacterTextSplitter` with quality filters (alpha ratio, min word count) for relevant segments.  
-- 🤖 **AI-Driven Querying**: Groq LLM with custom prompts, fallback strategies, and semantic caching.  
+-  **RAG Architecture**: Retrieval-Augmented Generation for accurate, context-enhanced responses using FAISS vector stores and MMR retrieval.  
+-  **Efficient Vector Search**: FAISS (CPU-optimized) for lightning-fast similarity searches on prebuilt indices.  
+-  **Advanced Text Processing**: `RecursiveCharacterTextSplitter` with quality filters (alpha ratio, min word count) for relevant segments.  
+-  **AI-Driven Querying**: Groq LLM with custom prompts, fallback strategies, and semantic caching.  
 
 ---
 
-## 📋 Workflow Overview
+## Workflow Overview
 InsightAgent follows a streamlined RAG pipeline to transform raw documents into actionable insights:
 
 ### 1. Document Ingestion
@@ -42,11 +42,11 @@ InsightAgent follows a streamlined RAG pipeline to transform raw documents into 
 - Results served via **FastAPI endpoints**, including answers, metadata, and quality scores.  
 - Performance logs exported to Google Sheets.  
 
-⏱️ Latency: ~13–15s first request, ~8s cached.  
+ Latency: ~13–15s first request, ~8s cached.  
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - [Docker](https://www.docker.com/) (latest recommended).  
@@ -76,12 +76,12 @@ Set these in a .env file or your environment:
 GROQ_API_KEY: Your Groq API key for LLM access.
 AUTH_TOKEN: Secure token for API authentication (e.g., your-secret-token-123).
 
-☁️ Deployment to Railway
+Deployment to Railway
 
 Deployed on Railway with a persistent faiss_index volume for scalability.   
 
 
-📐 Project Architecture   
+Project Architecture   
 textInsightAgent/
 ├── Dockerfile              # Multi-stage build for ~800MB image   
 ├── main.py                 # FastAPI server and endpoints   
